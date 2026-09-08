@@ -1,0 +1,50 @@
+# =====================
+# Python / FastAPI
+# =====================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+ENV/
+
+# SQLite database (KHÔNG commit DB)
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# =====================
+# Node / React
+# =====================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+
+# =====================
+# IDE / OS
+# =====================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# =====================
+# Test / Coverage
+# =====================
+.coverage
+htmlcov/
+.pytest_cache/
+
+# =====================
+# Others
+# =====================
+*.tmp
