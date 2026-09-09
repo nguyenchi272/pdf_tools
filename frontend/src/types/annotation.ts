@@ -2,6 +2,7 @@ export type AnnotationType =
   | 'highlight'
   | 'underline'
   | 'strikeout'
+  | 'note'
 
 export interface AnnotationRect {
   x: number
@@ -15,4 +16,6 @@ export interface Annotation {
   page: number
   type: AnnotationType
   rects: AnnotationRect[]
+
+  text?: string
 }

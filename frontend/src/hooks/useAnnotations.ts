@@ -2,16 +2,25 @@ import { useCallback, useState } from 'react'
 
 import type {
   Annotation,
-  AnnotationType,
   AnnotationRect,
+  AnnotationType,
 } from '../types/annotation'
 
 
 export default function useAnnotations() {
-
   const [annotations, setAnnotations] =
     useState<Annotation[]>([])
 
+
+  /*
+   * =====================================================
+   * ADD SELECTION ANNOTATION
+   *
+   * Highlight
+   * Underline
+   * Strikeout
+   * =====================================================
+   */
 
   const addAnnotation = useCallback(
     (
@@ -19,11 +28,12 @@ export default function useAnnotations() {
       type: AnnotationType,
       rects: AnnotationRect[],
     ) => {
-
-      if (rects.length === 0) {
+      if (
+        rects.length === 0 ||
+        type === 'note'
+      ) {
         return
       }
-
 
       const annotation: Annotation = {
         id: crypto.randomUUID(),
@@ -32,42 +42,96 @@ export default function useAnnotations() {
         rects,
       }
 
-
       setAnnotations((current) => [
         ...current,
         annotation,
       ])
-
     },
     [],
   )
 
 
-  const removeAnnotation = useCallback(
-    (id: string) => {
+  /*
+   * =====================================================
+   * ADD NOTE
+   * =====================================================
+   */
 
+  const addNote = useCallback(
+    (
+      page: number,
+      x: number,
+      y: number,
+      text: string,
+    ) => {
+      const trimmedText =
+        text.trim()
+
+      if (!trimmedText) {
+        return
+      }
+
+      const annotation: Annotation = {
+        id: crypto.randomUUID(),
+        page,
+        type: 'note',
+
+        rects: [
+          {
+            x,
+            y,
+            width: 24,
+            height: 24,
+          },
+        ],
+
+        text: trimmedText,
+      }
+
+      setAnnotations((current) => [
+        ...current,
+        annotation,
+      ])
+    },
+    [],
+  )
+
+
+  /*
+   * =====================================================
+   * REMOVE ONE
+   * =====================================================
+   */
+
+  const removeAnnotation =
+    useCallback((id: string) => {
       setAnnotations((current) =>
         current.filter(
           (annotation) =>
             annotation.id !== id,
         ),
       )
-
-    },
-    [],
-  )
+    }, [])
 
 
-  const clearAnnotations = useCallback(() => {
+  /*
+   * =====================================================
+   * CLEAR ALL
+   * =====================================================
+   */
 
-    setAnnotations([])
-
-  }, [])
+  const clearAnnotations =
+    useCallback(() => {
+      setAnnotations([])
+    }, [])
 
 
   return {
     annotations,
+
     addAnnotation,
+    addNote,
+
     removeAnnotation,
     clearAnnotations,
   }

@@ -196,6 +196,59 @@ export default function Toolbar({
       🖍 Highlight
     </button>
 
+    <button
+      className={
+        annotationMode === 'underline'
+          ? 'toolbar-button active'
+          : 'toolbar-button'
+      }
+      onClick={() => {
+        onAnnotationModeChange(
+          annotationMode === 'underline' ? null : 'underline',
+        )
+      }}
+      disabled={processing}
+      title="Underline"
+    >
+      <u>U</u> Underline
+    </button>
+
+    <button
+      className={
+        annotationMode === 'strikeout'
+          ? 'toolbar-button active'
+          : 'toolbar-button'
+      }
+      onClick={() => {
+        onAnnotationModeChange(
+          annotationMode === 'strikeout' ? null : 'strikeout',
+        )
+      }}
+      disabled={processing}
+      title="Strikethrough"
+    >
+      <s>S</s> Strikethrough
+    </button>
+
+    <button
+        className={
+            annotationMode === 'note'
+            ? 'toolbar-button active'
+            : 'toolbar-button'
+        }
+        onClick={() => {
+            onAnnotationModeChange(
+            annotationMode === 'note'
+                ? null
+                : 'note',
+            )
+        }}
+        disabled={processing}
+        title="Add Note"
+        >
+        📝 Note
+    </button>
+
 
       <div className="toolbar-separator" />
 

@@ -44,6 +44,7 @@ export default function App() {
   const {
     annotations,
     addAnnotation,
+    addNote,
     removeAnnotation,
     clearAnnotations,
   } = useAnnotations()
@@ -313,6 +314,7 @@ export default function App() {
                   addAnnotation
                 }
 
+                onAddNote={addNote}
 
                 /*
                  * PDF state
