@@ -10,6 +10,7 @@ import {
   Copy,
   FileOutput,
 } from 'lucide-react'
+import type { AnnotationType } from '../types/annotation'
 
 
 interface ToolbarProps {
@@ -22,6 +23,10 @@ interface ToolbarProps {
   selectedPages: number[]
 
   zoom: number
+
+  annotationMode:
+  | AnnotationType
+  | null
 
   onOpen: () => void
   onSave: () => void
@@ -39,6 +44,9 @@ interface ToolbarProps {
 
   onPreviousPage: () => void
   onNextPage: () => void
+
+  onAnnotationModeChange:
+  (mode: AnnotationType | null) => void
 }
 
 
@@ -52,6 +60,8 @@ export default function Toolbar({
   selectedPages,
 
   zoom,
+
+  annotationMode,
 
   onOpen,
   onSave,
@@ -69,6 +79,8 @@ export default function Toolbar({
 
   onPreviousPage,
   onNextPage,
+
+  onAnnotationModeChange,
 }: ToolbarProps) {
 
   return (
@@ -148,7 +160,6 @@ export default function Toolbar({
         Rotate
       </button>
 
-
       <button
         onClick={onExtract}
         disabled={
@@ -161,6 +172,29 @@ export default function Toolbar({
         <FileOutput size={18} />
         Extract
       </button>
+
+      <div className="toolbar-divider" />
+
+    <button
+      className={
+        annotationMode === 'highlight'
+          ? 'toolbar-button active'
+          : 'toolbar-button'
+      }
+      onClick={() => {
+
+        onAnnotationModeChange(
+          annotationMode === 'highlight'
+            ? null
+            : 'highlight',
+        )
+
+      }}
+      disabled={processing}
+      title="Highlight"
+    >
+      🖍 Highlight
+    </button>
 
 
       <div className="toolbar-separator" />

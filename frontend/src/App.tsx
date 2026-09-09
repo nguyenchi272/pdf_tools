@@ -2,6 +2,11 @@ import {
   FilePlus,
 } from 'lucide-react'
 
+import {
+  useState,
+} from 'react'
+
+
 import PDFViewer from './components/PDFViewer'
 import Sidebar from './components/Sidebar'
 import Toolbar from './components/Toolbar'
@@ -10,12 +15,51 @@ import {
   usePDFEditor,
 } from './hooks/usePDFEditor'
 
+import useAnnotations
+  from './hooks/useAnnotations'
+
+import type {
+  AnnotationType,
+} from './types/annotation'
+
 
 export default function App() {
+
+  /*
+   * =====================================================
+   * PDF EDITOR STATE
+   * =====================================================
+   */
 
   const editor =
     usePDFEditor()
 
+
+  /*
+   * =====================================================
+   * ANNOTATION STATE
+   * =====================================================
+   */
+
+  const {
+    annotations,
+    addAnnotation,
+    removeAnnotation,
+    clearAnnotations,
+  } = useAnnotations()
+
+
+  const [
+    annotationMode,
+    setAnnotationMode,
+  ] = useState<AnnotationType | null>(null)
+
+
+  /*
+   * =====================================================
+   * RENDER
+   * =====================================================
+   */
 
   return (
 
@@ -35,7 +79,9 @@ export default function App() {
         <nav className="menu">
 
           <button
-            onClick={editor.openPDF}
+            onClick={
+              editor.openPDF
+            }
           >
             File
           </button>
@@ -95,6 +141,11 @@ export default function App() {
           editor.zoom
         }
 
+
+        /*
+         * PDF operations
+         */
+
         onOpen={
           editor.openPDF
         }
@@ -119,6 +170,11 @@ export default function App() {
           editor.handleExtractPages
         }
 
+
+        /*
+         * Zoom
+         */
+
         onZoomIn={
           editor.zoomIn
         }
@@ -131,9 +187,19 @@ export default function App() {
           editor.resetZoom
         }
 
+
+        /*
+         * View rotation
+         */
+
         onRotateView={
           editor.rotateView
         }
+
+
+        /*
+         * Page navigation
+         */
 
         onPreviousPage={
           editor.previousPage
@@ -141,6 +207,19 @@ export default function App() {
 
         onNextPage={
           editor.nextPage
+        }
+
+
+        /*
+         * Annotation
+         */
+
+        annotationMode={
+          annotationMode
+        }
+
+        onAnnotationModeChange={
+          setAnnotationMode
         }
 
       />
@@ -156,7 +235,12 @@ export default function App() {
 
           <>
 
+            {/* =========================
+                SIDEBAR
+                ========================= */}
+
             <Sidebar
+
               pdfUrl={
                 editor.pdfUrl
               }
@@ -184,12 +268,18 @@ export default function App() {
               onReorder={
                 editor.handleReorder
               }
+
             />
 
+
+            {/* =========================
+                PDF VIEWER
+                ========================= */}
 
             <section className="viewer-container">
 
               <PDFViewer
+
                 pdfUrl={
                   editor.pdfUrl
                 }
@@ -206,6 +296,28 @@ export default function App() {
                   editor.currentPage
                 }
 
+
+                /*
+                 * Annotation state
+                 */
+
+                annotations={
+                  annotations
+                }
+
+                annotationMode={
+                  annotationMode
+                }
+
+                onAddAnnotation={
+                  addAnnotation
+                }
+
+
+                /*
+                 * PDF state
+                 */
+
                 onNumPages={
                   editor.setNumPages
                 }
@@ -213,6 +325,7 @@ export default function App() {
                 onPageChange={
                   editor.setCurrentPage
                 }
+
               />
 
             </section>
@@ -220,6 +333,10 @@ export default function App() {
           </>
 
         ) : (
+
+          /* =========================
+             EMPTY STATE
+             ========================= */
 
           <div className="empty-state">
 
@@ -272,9 +389,11 @@ export default function App() {
 
         <span>
 
-          {editor.selectedPages.length > 0
-            ? `${editor.selectedPages.length} page(s) selected`
-            : 'Ready'}
+          {annotationMode
+            ? `Annotation: ${annotationMode}`
+            : editor.selectedPages.length > 0
+              ? `${editor.selectedPages.length} page(s) selected`
+              : 'Ready'}
 
         </span>
 

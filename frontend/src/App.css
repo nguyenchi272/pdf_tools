@@ -473,6 +473,13 @@ body {
     0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
+/* .pdf-page {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+} */
+
 
 .page-number-label {
   margin-bottom: 6px;
@@ -571,4 +578,93 @@ body {
 
 .thumbnail-wrapper[draggable="true"]:active {
   cursor: grabbing;
+}
+
+.annotation-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+
+  pointer-events: none;
+
+  z-index: 10;
+}
+
+
+.annotation-item {
+  position: absolute;
+
+  inset: 0;
+
+  pointer-events: auto;
+
+  cursor: pointer;
+}
+
+
+.annotation-rect {
+  position: absolute;
+
+  box-sizing: border-box;
+
+  pointer-events: none;
+}
+
+
+.annotation-highlight
+.annotation-rect {
+  border-radius: 2px;
+}
+
+
+.annotation-underline
+.annotation-rect {
+  background: transparent;
+}
+
+
+.annotation-strikeout
+
+
+.annotation-selected
+.annotation-rect {
+  outline: 1px dashed rgba(255, 255, 255, 0.7);
+}
+
+.toolbar-button.active {
+  background: #3d5f86;
+  border-color: #5b8fc4;
+  color: #ffffff;
+}
+
+.pdf-page-container {
+  position: relative;
+}
+
+.textLayer {
+  z-index: 4;
+}
+
+
+.react-annotation-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+
+.textLayer ::selection {
+  background: rgba(80, 140, 255, 0.35);
+}
+
+.annotation {
+  position: absolute;
+  pointer-events: none;
+}
+
+.annotation-highlight {
+  background: rgba(255, 230, 0, 0.45);
+  border-radius: 2px;
 }
