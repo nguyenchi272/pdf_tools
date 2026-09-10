@@ -49,6 +49,8 @@ interface PDFPageProps {
     text: string,
   ) => void
 
+  onRemoveAnnotation: (id: string) => void
+
   onPageRef: (
     page: number,
     element: HTMLDivElement | null,
@@ -68,6 +70,8 @@ export default function PDFPage({
 
   onAddAnnotation,
   onAddNote,
+
+  onRemoveAnnotation,
 
   onPageRef,
 }: PDFPageProps) {
@@ -284,6 +288,7 @@ export default function PDFPage({
           canvasContext:
             context,
           viewport,
+          annotationMode: pdfjsLib.AnnotationMode.DISABLE,
         }).promise
 
 
@@ -750,6 +755,10 @@ export default function PDFPage({
 
           height={
             viewportSize.height
+          }
+
+          onRemoveAnnotation={
+            onRemoveAnnotation
           }
         />
       </div>

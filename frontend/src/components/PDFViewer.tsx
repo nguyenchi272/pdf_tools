@@ -18,6 +18,7 @@ import type {
 } from '../types/annotation'
 
 import PDFPage from './pdf/PDFPage'
+import { loadAnnotations } from '../api/pdfApi'
 
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -52,6 +53,14 @@ interface PDFViewerProps {
     text: string,
   ) => void
 
+  onRemoveAnnotation: (
+    id: string,
+  ) => void
+
+  onLoadAnnotations: (
+    annotations: Annotation[],
+  ) => void
+
   onNumPages: (
     pages: number,
   ) => void
@@ -75,6 +84,8 @@ export default function PDFViewer({
 
   onAddAnnotation,
   onAddNote,
+  onRemoveAnnotation,
+  onLoadAnnotations,
 
   onNumPages,
   onPageChange,
@@ -157,6 +168,78 @@ export default function PDFViewer({
   }, [
     pdfUrl,
     onNumPages,
+  ])
+
+
+  /*
+  * =====================================================
+  * LOAD NATIVE PDF ANNOTATIONS
+  * =====================================================
+  *
+  * The backend reads annotations directly from
+  * the current PDF using PyMuPDF.
+  *
+  * Every time pdfUrl changes, reload annotations.
+  */
+
+  useEffect(() => {
+
+    if (!pdfUrl) {
+      onLoadAnnotations([])
+      return
+    }
+
+    let cancelled = false
+
+    /*
+    * Clear previous document annotations immediately.
+    *
+    * This prevents annotations from the previous PDF
+    * from being displayed while the new PDF is loading.
+    */
+    onLoadAnnotations([])
+
+    const fetchAnnotations = async () => {
+
+      try {
+
+        const loadedAnnotations =
+          await loadAnnotations(
+            pdfUrl,
+          )
+
+        if (cancelled) {
+          return
+        }
+
+        onLoadAnnotations(
+          loadedAnnotations,
+        )
+
+      } catch (error) {
+
+        if (cancelled) {
+          return
+        }
+
+        console.error(
+          'Failed to load PDF annotations:',
+          error,
+        )
+
+      }
+
+    }
+
+    fetchAnnotations()
+
+    return () => {
+      cancelled = true
+    }
+
+  }, [
+    pdfUrl,
+    onLoadAnnotations,
   ])
 
 
@@ -388,6 +471,10 @@ export default function PDFViewer({
 
               onAddNote={
                 onAddNote
+              }
+
+              onRemoveAnnotation={
+                onRemoveAnnotation
               }
 
               onPageRef={

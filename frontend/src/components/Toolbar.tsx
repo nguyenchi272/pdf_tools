@@ -9,6 +9,8 @@ import {
   Trash2,
   Copy,
   FileOutput,
+  Undo2,
+  Redo2,
 } from 'lucide-react'
 import type { AnnotationType } from '../types/annotation'
 
@@ -27,6 +29,9 @@ interface ToolbarProps {
   annotationMode:
   | AnnotationType
   | null
+
+  canUndo: boolean
+  canRedo: boolean
 
   onOpen: () => void
   onSave: () => void
@@ -47,6 +52,9 @@ interface ToolbarProps {
 
   onAnnotationModeChange:
   (mode: AnnotationType | null) => void
+
+  onUndo: () => void
+  onRedo: () => void
 }
 
 
@@ -62,6 +70,9 @@ export default function Toolbar({
   zoom,
 
   annotationMode,
+
+  canRedo,
+  canUndo,
 
   onOpen,
   onSave,
@@ -81,6 +92,9 @@ export default function Toolbar({
   onNextPage,
 
   onAnnotationModeChange,
+
+  onRedo,
+  onUndo,
 }: ToolbarProps) {
 
   return (
@@ -109,6 +123,24 @@ export default function Toolbar({
         title="Save PDF"
       >
         Save
+      </button>
+
+      <button
+        type="button"
+        onClick={onUndo}
+        disabled={!canUndo}
+        title="Ctl Z"
+        >
+        <Undo2 size={18} />
+        </button>
+
+        <button
+        type="button"
+        onClick={onRedo}
+        disabled={!canRedo}
+        title="Ctl Y"
+        >
+        <Redo2 size={18} />
       </button>
 
 

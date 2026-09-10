@@ -1,7 +1,9 @@
+import json
+
 import pymupdf
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 
 
 router = APIRouter()
@@ -76,6 +78,151 @@ def parse_page_numbers(
 
     return zero_based
 
+SUPPORTED_ANNOTATION_TYPES = {
+    'highlight',
+    'underline',
+    'strikeout',
+    'text',
+}
+
+
+def point_to_xy(point):
+    if hasattr(point, 'x') and hasattr(point, 'y'):
+        return float(point.x), float(point.y)
+
+    if isinstance(point, (tuple, list)) and len(point) >= 2:
+        return float(point[0]), float(point[1])
+
+    raise ValueError(
+        f'Unsupported PDF point format: {point!r}'
+    )
+
+
+def vertices_to_rects(vertices):
+    """
+    Convert PDF text-markup QuadPoints into frontend rectangles.
+
+    Text markup annotations normally have 4 points per quad:
+        p1, p2, p3, p4
+
+    A single annotation can contain multiple quads, for example
+    when a highlight spans multiple lines.
+    """
+    if not vertices:
+        return []
+
+    rects = []
+
+    for index in range(0, len(vertices), 4):
+        quad = vertices[index:index + 4]
+
+        if len(quad) < 4:
+            break
+
+        points = [
+            point_to_xy(point)
+            for point in quad
+        ]
+
+        xs = [point[0] for point in points]
+        ys = [point[1] for point in points]
+
+        x0 = min(xs)
+        y0 = min(ys)
+        x1 = max(xs)
+        y1 = max(ys)
+
+        width = x1 - x0
+        height = y1 - y0
+
+        if width <= 0 or height <= 0:
+            continue
+
+        rects.append({
+            'x': x0,
+            'y': y0,
+            'width': width,
+            'height': height,
+        })
+
+    return rects
+
+
+def annot_to_api_annotation(page_number, annot):
+    """
+    Convert a PyMuPDF Annot object to the frontend Annotation format.
+    """
+
+    annot_type = annot.type
+
+    # PyMuPDF annot.type is typically:
+    # [number, "Highlight", ...]
+    type_name = ''
+
+    if annot_type and len(annot_type) >= 2:
+        type_name = str(
+            annot_type[1]
+        ).strip().lower()
+
+    if type_name not in SUPPORTED_ANNOTATION_TYPES:
+        return None
+
+    if type_name == 'text':
+        rect = annot.rect
+
+        rects = [
+            {
+                'x': float(rect.x0),
+                'y': float(rect.y0),
+                'width': float(rect.width),
+                'height': float(rect.height),
+            }
+        ]
+
+        info = annot.info or {}
+
+        return {
+            'id': f'pdf-{page_number}-{annot.xref}',
+            'xref': int(annot.xref),
+            'page': page_number,
+            'type': 'note',
+            'rects': rects,
+            'text': info.get('content', ''),
+        }
+
+    # Highlight / Underline / StrikeOut
+    rects = vertices_to_rects(
+        annot.vertices
+    )
+
+    # Some PDFs may not expose vertices correctly.
+    # Fall back to the annotation bounding box.
+    if not rects:
+        rect = annot.rect
+
+        rects = [
+            {
+                'x': float(rect.x0),
+                'y': float(rect.y0),
+                'width': float(rect.width),
+                'height': float(rect.height),
+            }
+        ]
+
+    frontend_type = type_name
+
+    if frontend_type == 'strikeout':
+        frontend_type = 'strikeout'
+
+    return {
+        'id': f'pdf-{page_number}-{annot.xref}',
+        'xref': int(annot.xref),
+        'page': page_number,
+        'type': frontend_type,
+        'rects': rects,
+        'text': '',
+    }
+
 
 def document_response(
     doc: pymupdf.Document,
@@ -96,6 +243,398 @@ def document_response(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+# ============================================================
+# Save Annotations
+# ============================================================
+
+def parse_annotations(
+    annotations: str,
+) -> list[dict]:
+    """
+    Parse annotation JSON received from the frontend.
+
+    Expected format:
+
+    [
+        {
+            "id": "...",
+            "page": 1,
+            "type": "highlight",
+            "rects": [
+                {
+                    "x": 100,
+                    "y": 150,
+                    "width": 200,
+                    "height": 20
+                }
+            ],
+            "text": "..."
+        }
+    ]
+    """
+
+    if not annotations.strip():
+        return []
+
+    try:
+        data = json.loads(annotations)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid annotations JSON: {exc}",
+        )
+
+    if not isinstance(data, list):
+        raise HTTPException(
+            status_code=400,
+            detail="Annotations must be a JSON array.",
+        )
+
+    return data
+
+
+def parse_annotation_rect(
+    rect: dict,
+) -> pymupdf.Rect:
+    """Convert frontend annotation rect to PyMuPDF Rect."""
+
+    try:
+        x = float(rect["x"])
+        y = float(rect["y"])
+        width = float(rect["width"])
+        height = float(rect["height"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid annotation rectangle.",
+        )
+
+    if width <= 0 or height <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Annotation rectangle must have positive width and height.",
+        )
+
+    return pymupdf.Rect(
+        x,
+        y,
+        x + width,
+        y + height,
+    )
+
+
+def add_pdf_annotation(
+    page: pymupdf.Page,
+    annotation: dict,
+) -> None:
+    """
+    Add one frontend annotation to a PDF page.
+
+    Supported types:
+        highlight
+        underline
+        strikeout
+        note
+    """
+
+    annotation_type = annotation.get("type")
+
+    if annotation_type not in {
+        "highlight",
+        "underline",
+        "strikeout",
+        "note",
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported annotation type: {annotation_type}",
+        )
+
+    rects = annotation.get("rects")
+
+    if not isinstance(rects, list) or not rects:
+        raise HTTPException(
+            status_code=400,
+            detail="Annotation must contain at least one rectangle.",
+        )
+
+    pdf_rects = [
+        parse_annotation_rect(rect)
+        for rect in rects
+    ]
+
+    # --------------------------------------------------------
+    # Highlight
+    # --------------------------------------------------------
+
+    if annotation_type == "highlight":
+        annot = page.add_highlight_annot(
+            pdf_rects
+        )
+
+        annot.set_colors(
+            stroke=(1, 0.9, 0)
+        )
+
+        annot.update()
+
+        return
+
+    # --------------------------------------------------------
+    # Underline
+    # --------------------------------------------------------
+
+    if annotation_type == "underline":
+        annot = page.add_underline_annot(
+            pdf_rects
+        )
+
+        annot.set_colors(
+            stroke=(0.15, 0.4, 0.9)
+        )
+
+        annot.update()
+
+        return
+
+    # --------------------------------------------------------
+    # Strikeout
+    # --------------------------------------------------------
+
+    if annotation_type == "strikeout":
+        annot = page.add_strikeout_annot(
+            pdf_rects
+        )
+
+        annot.set_colors(
+            stroke=(0.85, 0.15, 0.15)
+        )
+
+        annot.update()
+
+        return
+
+    # --------------------------------------------------------
+    # Note
+    # --------------------------------------------------------
+
+    if annotation_type == "note":
+        rect = pdf_rects[0]
+
+        # PDF sticky-note annotations use a point/rect
+        # location. Keep the frontend position and use
+        # the annotation text as the comment.
+        annot = page.add_text_annot(
+            rect.tl,
+            annotation.get("text", ""),
+        )
+
+        annot.update()
+
+        return
+
+@router.post('/save-annotations')
+async def save_annotations(
+    file: UploadFile = File(...),
+    annotations: str = Form(...),
+):
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(
+            status_code=400,
+            detail='Empty PDF file.',
+        )
+
+    try:
+        annotation_data = json.loads(
+            annotations
+        )
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail='Invalid annotation JSON.',
+        )
+
+    if not isinstance(
+        annotation_data,
+        list,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail='Annotations must be a list.',
+        )
+
+    try:
+        doc = pymupdf.open(
+            stream=contents,
+            filetype='pdf',
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Unable to open PDF: {exc}',
+        )
+
+    supported_types = {
+        'highlight',
+        'underline',
+        'strikeout',
+        'text',
+    }
+
+    try:
+
+        existing_annotations = {}
+
+        for page_index in range(
+            doc.page_count
+        ):
+            page = doc[page_index]
+
+            page_number = page_index + 1
+
+            for annot in page.annots() or []:
+                annot_type = annot.type
+
+                type_name = ''
+
+                if (
+                    annot_type
+                    and len(annot_type) >= 2
+                ):
+                    type_name = str(
+                        annot_type[1]
+                    ).strip().lower()
+
+                if (
+                    type_name
+                    not in supported_types
+                ):
+                    continue
+
+                existing_annotations[
+                    int(annot.xref)
+                ] = {
+                    'page': page_number,
+                    'annot': annot,
+                    'type': type_name,
+                }
+
+        requested_xrefs = set()
+
+        for annotation in annotation_data:
+
+            if not isinstance(
+                annotation,
+                dict,
+            ):
+                continue
+
+            xref = annotation.get(
+                'xref'
+            )
+
+            if xref is None:
+                continue
+
+            try:
+                requested_xrefs.add(
+                    int(xref)
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+        for xref, item in (
+            existing_annotations.items()
+        ):
+
+            if xref in requested_xrefs:
+                continue
+
+            page_number = item['page']
+
+            page = doc[
+                page_number - 1
+            ]
+
+            annot = page.load_annot(
+                xref
+            )
+
+            if annot is not None:
+                page.delete_annot(
+                    annot
+                )
+
+        for annotation in annotation_data:
+
+            if not isinstance(
+                annotation,
+                dict,
+            ):
+                continue
+
+            xref = annotation.get(
+                'xref'
+            )
+
+            if xref is not None:
+                continue
+
+            page_number = annotation.get(
+                'page'
+            )
+
+            if not isinstance(
+                page_number,
+                int,
+            ):
+                continue
+
+            if (
+                page_number < 1
+                or page_number > doc.page_count
+            ):
+                continue
+
+            page = doc[
+                page_number - 1
+            ]
+
+            add_pdf_annotation(
+                page,
+                annotation,
+            )
+
+        output = doc.tobytes(
+            garbage=4,
+        )
+
+    except Exception as exc:
+
+        raise HTTPException(
+            status_code=500,
+            detail=f'Failed to save annotations: {exc}',
+        )
+
+    finally:
+        doc.close()
+
+
+    return Response(
+        content=output,
+        media_type='application/pdf',
+        headers={
+            'Content-Disposition':
+                'attachment; filename="annotated.pdf"',
         },
     )
 
@@ -137,10 +676,10 @@ async def delete_pages(
             len(doc),
         )
 
-        # Delete from highest index to lowest index so that
-        # deleting one page does not change indexes of pages
-        # that are still waiting to be deleted.
-        for page_index in sorted(set(page_indexes), reverse=True):
+        for page_index in sorted(
+            set(page_indexes),
+            reverse=True,
+        ):
             doc.delete_page(page_index)
 
         if len(doc) == 0:
@@ -152,8 +691,6 @@ async def delete_pages(
         return document_response(doc)
 
     except Exception:
-        # document_response() already closes the document
-        # on success. Close it here when an exception occurs.
         if not doc.is_closed:
             doc.close()
 
@@ -341,10 +878,11 @@ async def duplicate_page(
         page_index = page - 1
 
         if page_index == len(doc) - 1:
-        # Last page -> append duplicate to the end
+            # Last page -> append duplicate to the end
             doc.fullcopy_page(page_index)
         else:
-        # Other pages -> insert duplicate immediately after original
+            # Other pages -> insert duplicate immediately
+            # after original
             doc.fullcopy_page(
                 page_index,
                 page_index + 1,
@@ -400,8 +938,6 @@ async def extract_pages(
         output = pymupdf.open()
 
         try:
-            # Insert each selected page individually.
-            # This correctly supports non-contiguous pages.
             for page_index in page_indexes:
                 output.insert_pdf(
                     source,
@@ -426,3 +962,53 @@ async def extract_pages(
             source.close()
 
         raise
+
+# ============================================================
+# Annotations
+# ============================================================    
+@router.post('/annotations')
+async def read_annotations(
+    file: UploadFile = File(...),
+):
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(
+            status_code=400,
+            detail='Empty PDF file',
+        )
+
+    try:
+        doc = pymupdf.open(
+            stream=contents,
+            filetype='pdf',
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Unable to open PDF: {exc}',
+        )
+
+    annotations = []
+
+    try:
+        for page_index in range(doc.page_count):
+            page = doc[page_index]
+
+            page_number = page_index + 1
+
+            for annot in page.annots() or []:
+                annotation = annot_to_api_annotation(
+                    page_number,
+                    annot,
+                )
+
+                if annotation is not None:
+                    annotations.append(
+                        annotation
+                    )
+
+    finally:
+        doc.close()
+
+    return annotations

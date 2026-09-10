@@ -527,6 +527,15 @@ export function usePDFEditor() {
     }
   }
 
+  const replacePdfFile = (
+    file: File,
+  ) => {
+    setPdfFile(file)
+
+    setSelectedPages([])
+    setRotation(0)
+  }
+
 
   /*
    * Save current PDF.
@@ -599,5 +608,6 @@ export function usePDFEditor() {
     handleExtractPages,
 
     savePDF,
+    replacePdfFile,
   }
 }

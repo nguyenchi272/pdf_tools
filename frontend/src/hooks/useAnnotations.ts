@@ -1,26 +1,50 @@
 import { useCallback, useState } from 'react'
-
 import type {
   Annotation,
   AnnotationRect,
   AnnotationType,
 } from '../types/annotation'
 
+interface AnnotationHistory {
+  past: Annotation[][]
+  present: Annotation[]
+  future: Annotation[][]
+}
 
 export default function useAnnotations() {
-  const [annotations, setAnnotations] =
-    useState<Annotation[]>([])
+  const [history, setHistory] =
+    useState<AnnotationHistory>({
+      past: [],
+      present: [],
+      future: [],
+    })
 
+  const annotations = history.present
 
-  /*
-   * =====================================================
-   * ADD SELECTION ANNOTATION
-   *
-   * Highlight
-   * Underline
-   * Strikeout
-   * =====================================================
-   */
+  const updateAnnotations = useCallback(
+    (nextAnnotations: Annotation[]) => {
+      setHistory((current) => ({
+        past: [
+          ...current.past,
+          current.present,
+        ],
+        present: nextAnnotations,
+        future: [],
+      }))
+    },
+    [],
+  )
+
+  const replaceAnnotations = useCallback(
+    (nextAnnotations: Annotation[]) => {
+        setHistory({
+        past: [],
+        present: nextAnnotations,
+        future: [],
+        })
+    },
+    [],
+  )
 
   const addAnnotation = useCallback(
     (
@@ -42,20 +66,13 @@ export default function useAnnotations() {
         rects,
       }
 
-      setAnnotations((current) => [
-        ...current,
+      updateAnnotations([
+        ...annotations,
         annotation,
       ])
     },
-    [],
+    [annotations, updateAnnotations],
   )
-
-
-  /*
-   * =====================================================
-   * ADD NOTE
-   * =====================================================
-   */
 
   const addNote = useCallback(
     (
@@ -64,8 +81,7 @@ export default function useAnnotations() {
       y: number,
       text: string,
     ) => {
-      const trimmedText =
-        text.trim()
+      const trimmedText = text.trim()
 
       if (!trimmedText) {
         return
@@ -75,7 +91,6 @@ export default function useAnnotations() {
         id: crypto.randomUUID(),
         page,
         type: 'note',
-
         rects: [
           {
             x,
@@ -84,55 +99,119 @@ export default function useAnnotations() {
             height: 24,
           },
         ],
-
         text: trimmedText,
       }
 
-      setAnnotations((current) => [
-        ...current,
+      updateAnnotations([
+        ...annotations,
         annotation,
       ])
     },
-    [],
+    [annotations, updateAnnotations],
   )
 
-
-  /*
-   * =====================================================
-   * REMOVE ONE
-   * =====================================================
-   */
-
-  const removeAnnotation =
-    useCallback((id: string) => {
-      setAnnotations((current) =>
-        current.filter(
+  const removeAnnotation = useCallback(
+    (id: string) => {
+      const nextAnnotations =
+        annotations.filter(
           (annotation) =>
             annotation.id !== id,
-        ),
+        )
+
+      if (
+        nextAnnotations.length ===
+        annotations.length
+      ) {
+        return
+      }
+
+      updateAnnotations(
+        nextAnnotations,
       )
-    }, [])
+    },
+    [annotations, updateAnnotations],
+  )
 
+  const undo = useCallback(() => {
+    setHistory((current) => {
+      if (current.past.length === 0) {
+        return current
+      }
 
-  /*
-   * =====================================================
-   * CLEAR ALL
-   * =====================================================
-   */
+      const previous =
+        current.past[
+          current.past.length - 1
+        ]
+
+      return {
+        past: current.past.slice(
+          0,
+          -1,
+        ),
+
+        present: previous,
+
+        future: [
+          current.present,
+          ...current.future,
+        ],
+      }
+    })
+  }, [])
+
+  const redo = useCallback(() => {
+    setHistory((current) => {
+      if (current.future.length === 0) {
+        return current
+      }
+
+      const next =
+        current.future[0]
+
+      return {
+        past: [
+          ...current.past,
+          current.present,
+        ],
+
+        present: next,
+
+        future:
+          current.future.slice(1),
+      }
+    })
+  }, [])
+
+  const canUndo =
+    history.past.length > 0
+
+  const canRedo =
+    history.future.length > 0
 
   const clearAnnotations =
     useCallback(() => {
-      setAnnotations([])
-    }, [])
+      if (annotations.length === 0) {
+        return
+      }
 
+      updateAnnotations([])
+    }, [
+      annotations,
+      updateAnnotations,
+    ])
 
   return {
     annotations,
 
     addAnnotation,
     addNote,
-
     removeAnnotation,
     clearAnnotations,
+    replaceAnnotations,
+
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   }
 }

@@ -13,6 +13,7 @@ export interface AnnotationRect {
 
 export interface Annotation {
   id: string
+  xref?: number
   page: number
   type: AnnotationType
   rects: AnnotationRect[]

@@ -3,7 +3,7 @@ import {
 } from 'lucide-react'
 
 import {
-  useState,
+  useState, useEffect
 } from 'react'
 
 
@@ -22,6 +22,7 @@ import type {
   AnnotationType,
 } from './types/annotation'
 
+import { saveAnnotations } from './api/pdfApi'
 
 export default function App() {
 
@@ -47,6 +48,11 @@ export default function App() {
     addNote,
     removeAnnotation,
     clearAnnotations,
+    replaceAnnotations,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useAnnotations()
 
 
@@ -55,6 +61,141 @@ export default function App() {
     setAnnotationMode,
   ] = useState<AnnotationType | null>(null)
 
+  const [isSaving, setIsSaving] =
+    useState(false)
+
+  useEffect(() => {
+  const handleKeyDown = (
+    event: KeyboardEvent,
+  ) => {
+    const target =
+      event.target as HTMLElement | null
+
+    const isEditing =
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      target?.isContentEditable
+
+    if (isEditing) {
+      return
+    }
+    const isModifier =
+      event.ctrlKey ||
+      event.metaKey
+
+    if (!isModifier) {
+      return
+    }
+
+    if (
+      event.key.toLowerCase() === 'z'
+    ) {
+      event.preventDefault()
+
+      if (event.shiftKey) {
+        redo()
+      } else {
+        undo()
+      }
+
+      return
+    }
+
+    if (
+      event.key.toLowerCase() === 'y'
+    ) {
+      event.preventDefault()
+      redo()
+    }
+  }
+
+  window.addEventListener(
+    'keydown',
+    handleKeyDown,
+  )
+
+  return () => {
+    window.removeEventListener(
+      'keydown',
+      handleKeyDown,
+    )
+  }
+}, [undo, redo])
+
+const handleSaveAnnotations =
+  async () => {
+
+    if (!editor.pdfUrl) {
+      return
+    }
+
+    try {
+
+      setIsSaving(true)
+
+      const newFile =
+        await saveAnnotations(
+          editor.pdfUrl,
+          annotations,
+        )
+
+      /*
+       * Make the newly generated PDF
+       * the actual current PDF.
+       */
+      editor.replacePdfFile(
+        newFile,
+      )
+
+      /*
+       * Download the newly generated PDF.
+       */
+      const url =
+        URL.createObjectURL(
+          newFile,
+        )
+
+      const link =
+        document.createElement('a')
+
+      link.href = url
+
+      link.download =
+        newFile.name ||
+        'annotated.pdf'
+
+      document.body.appendChild(
+        link,
+      )
+
+      link.click()
+
+      link.remove()
+
+      setTimeout(() => {
+        URL.revokeObjectURL(url)
+      }, 1000)
+
+    } catch (error) {
+
+      console.error(
+        'Failed to save annotations:',
+        error,
+      )
+
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : 'Failed to save annotations.',
+      )
+
+    } finally {
+
+      setIsSaving(false)
+
+    }
+  }
 
   /*
    * =====================================================
@@ -123,7 +264,7 @@ export default function App() {
         }
 
         processing={
-          editor.processing
+          editor.processing || isSaving
         }
 
         currentPage={
@@ -152,7 +293,7 @@ export default function App() {
         }
 
         onSave={
-          editor.savePDF
+          handleSaveAnnotations
         }
 
         onDelete={
@@ -222,6 +363,11 @@ export default function App() {
         onAnnotationModeChange={
           setAnnotationMode
         }
+
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
 
       />
 
@@ -315,6 +461,12 @@ export default function App() {
                 }
 
                 onAddNote={addNote}
+
+                onRemoveAnnotation={removeAnnotation}
+
+                onLoadAnnotations={
+                  replaceAnnotations
+                }
 
                 /*
                  * PDF state
