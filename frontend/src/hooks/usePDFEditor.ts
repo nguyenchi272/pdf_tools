@@ -1,547 +1,115 @@
-import {
-  useEffect,
-  useState,
-} from 'react'
-
-import {
-  deletePages,
-  rotatePages,
-  duplicatePage,
-  reorderPages,
-  extractPages,
-} from '../api/pdfApi'
-
+import usePDFDocument from './usePDFDocument'
+import usePDFPages from './usePDFPages'
+import usePDFView from './usePDFView'
+import usePDFOperations from './usePDFOperations'
 
 export function usePDFEditor() {
-
-  const [pdfFile, setPdfFile] =
-    useState<File | null>(null)
-
-  const [pdfUrl, setPdfUrl] =
-    useState('')
-
-  const [numPages, setNumPages] =
-    useState(0)
-
-  const [currentPage, setCurrentPage] =
-    useState(1)
-
-  const [selectedPages, setSelectedPages] =
-    useState<number[]>([])
-
-  const [zoom, setZoom] =
-    useState(1)
-
-  const [rotation, setRotation] =
-    useState(0)
-
-  const [processing, setProcessing] =
-    useState(false)
-
+  /*
+   * Document state
+   */
+  const pdfDocument =
+    usePDFDocument()
 
   /*
-   * Create object URL whenever the PDF changes.
+   * Page state
    */
-
-  useEffect(() => {
-
-    if (!pdfFile) {
-      setPdfUrl('')
-      return
-    }
-
-    const url =
-      URL.createObjectURL(pdfFile)
-
-    setPdfUrl(url)
-
-    return () => {
-      URL.revokeObjectURL(url)
-    }
-
-  }, [pdfFile])
-
+  const pages =
+    usePDFPages()
 
   /*
-   * Open PDF
+   * View state
    */
+  const view =
+    usePDFView()
 
+  /*
+   * PDF operations
+   */
+  const operations =
+    usePDFOperations({
+      pdfFile:
+        pdfDocument.pdfFile,
+
+      numPages:
+        pages.numPages,
+
+      currentPage:
+        pages.currentPage,
+
+      selectedPages:
+        pages.selectedPages,
+
+      setPdfFile:
+        pdfDocument.setPdfFile,
+
+      setCurrentPage:
+        pages.setCurrentPage,
+
+      setSelectedPages:
+        pages.setSelectedPages,
+
+      setRotation:
+        view.setRotation,
+      onChange: () => {
+        pdfDocument.setIsDirty(true)
+      },
+    })
+
+  /*
+   * Open PDF.
+   *
+   * Opening a new document resets
+   * page, selection, zoom and rotation.
+   */
   const openPDF = () => {
+    pdfDocument.openPDF(
+      (file) => {
+        pdfDocument.setPdfFile(file)
 
-    const input =
-      document.createElement('input')
+        pages.setNumPages(0)
 
-    input.type = 'file'
-    input.accept = 'application/pdf'
+        pages.setCurrentPage(1)
 
-    input.onchange = () => {
+        pages.setSelectedPages([])
 
-      const file =
-        input.files?.[0]
+        view.setZoom(1)
 
-      if (!file) return
+        view.setRotation(0)
 
-      if (
-        file.type !== 'application/pdf'
-      ) {
-
-        alert(
-          'Please select a PDF file.',
-        )
-
-        return
-      }
-
-      setPdfFile(file)
-
-      setCurrentPage(1)
-      setSelectedPages([])
-      setZoom(1)
-      setRotation(0)
-      setNumPages(0)
-    }
-
-    input.click()
-  }
-
-
-  /*
-   * Zoom
-   */
-
-  const zoomIn = () => {
-
-    setZoom((value) =>
-      Math.min(
-        3,
-        Number(
-          (value + 0.1).toFixed(2),
-        ),
-      ),
+        pdfDocument.setIsDirty(false)
+      },
     )
   }
 
-
-  const zoomOut = () => {
-
-    setZoom((value) =>
-      Math.max(
-        0.5,
-        Number(
-          (value - 0.1).toFixed(2),
-        ),
-      ),
-    )
-  }
-
-
-  const resetZoom = () => {
-    setZoom(1)
-  }
-
-
   /*
-   * Viewer-only rotation.
+   * Replace current PDF.
+   *
+   * Used when another operation
+   * generates a new PDF file,
+   * for example saveAnnotations().
    */
-
-  const rotateView = () => {
-
-    setRotation(
-      (value) =>
-        (value + 90) % 360,
-    )
-  }
-
-
-  /*
-   * Page navigation
-   */
-
-  const previousPage = () => {
-
-    setCurrentPage((page) =>
-      Math.max(1, page - 1),
-    )
-  }
-
-
-  const nextPage = () => {
-
-    setCurrentPage((page) =>
-      Math.min(
-        numPages,
-        page + 1,
-      ),
-    )
-  }
-
-
-  /*
-   * Delete selected pages.
-   */
-
-  const handleDeletePages = async () => {
-
-    if (!pdfFile) return
-
-    if (selectedPages.length === 0) {
-
-      alert(
-        'Select at least one page first.',
-      )
-
-      return
-    }
-
-    const confirmed =
-      window.confirm(
-        `Delete ${selectedPages.length} selected page(s)?`,
-      )
-
-    if (!confirmed) return
-
-    try {
-
-      setProcessing(true)
-
-      const newFile =
-        await deletePages(
-          pdfFile,
-          selectedPages,
-        )
-
-      const deletedCurrentPage =
-        selectedPages.includes(currentPage)
-
-      const deletedBeforeCurrent =
-        selectedPages.filter(
-          (page) =>
-            page < currentPage,
-        ).length
-
-      setPdfFile(newFile)
-
-      setSelectedPages([])
-
-      /*
-       * Keep the same logical page visible
-       * whenever possible.
-       */
-      if (deletedCurrentPage) {
-
-        setCurrentPage(
-          Math.min(
-            currentPage -
-              deletedBeforeCurrent,
-            Math.max(
-              1,
-              numPages -
-                selectedPages.length,
-            ),
-          ),
-        )
-
-      } else {
-
-        setCurrentPage(
-          Math.max(
-            1,
-            currentPage -
-              deletedBeforeCurrent,
-          ),
-        )
-      }
-
-      setRotation(0)
-
-    } catch (error) {
-
-      console.error(error)
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'Failed to delete pages.',
-      )
-
-    } finally {
-
-      setProcessing(false)
-    }
-  }
-
-
-  /*
-   * Rotate selected pages.
-   */
-
-  const handleRotatePages = async () => {
-
-    if (!pdfFile) return
-
-    if (selectedPages.length === 0) {
-
-      alert(
-        'Select at least one page first.',
-      )
-
-      return
-    }
-
-    try {
-
-      setProcessing(true)
-
-      const newFile =
-        await rotatePages(
-          pdfFile,
-          selectedPages,
-          90,
-        )
-
-      setPdfFile(newFile)
-
-      setSelectedPages([])
-
-      setRotation(0)
-
-    } catch (error) {
-
-      console.error(error)
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'Failed to rotate pages.',
-      )
-
-    } finally {
-
-      setProcessing(false)
-    }
-  }
-
-
-  /*
-   * Duplicate selected page.
-   */
-
-  const handleDuplicatePage = async () => {
-
-    if (!pdfFile) return
-
-    if (selectedPages.length !== 1) {
-
-      alert(
-        'Select exactly one page to duplicate.',
-      )
-
-      return
-    }
-
-    try {
-
-      setProcessing(true)
-
-      const selectedPage =
-        selectedPages[0]
-
-      const newFile =
-        await duplicatePage(
-          pdfFile,
-          selectedPage,
-        )
-
-      setPdfFile(newFile)
-
-      setSelectedPages([])
-
-      setRotation(0)
-
-      /*
-       * The duplicated page is inserted
-       * immediately after the original.
-       */
-      setCurrentPage(
-        selectedPage + 1 <= numPages + 1
-          ? selectedPage + 1
-          : selectedPage,
-      )
-
-    } catch (error) {
-
-      console.error(error)
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'Failed to duplicate page.',
-      )
-
-    } finally {
-
-      setProcessing(false)
-    }
-  }
-
-
-  /*
-   * Reorder pages using drag & drop.
-   */
-
-  const handleReorder = async (
-    draggedPage: number,
-    targetPage: number,
-  ) => {
-
-    if (!pdfFile) return
-
-    if (
-      draggedPage === targetPage
-    ) {
-      return
-    }
-
-    const order =
-      Array.from(
-        { length: numPages },
-        (_, index) => index + 1,
-      )
-
-    const draggedIndex =
-      order.indexOf(draggedPage)
-
-    if (draggedIndex === -1) {
-      return
-    }
-
-    order.splice(
-      draggedIndex,
-      1,
-    )
-
-    const targetIndex =
-      order.indexOf(targetPage)
-
-    if (targetIndex === -1) {
-      return
-    }
-
-    order.splice(
-      targetIndex,
-      0,
-      draggedPage,
-    )
-
-    const currentIndex =
-      order.indexOf(currentPage)
-
-    try {
-
-      setProcessing(true)
-
-      const newFile =
-        await reorderPages(
-          pdfFile,
-          order,
-        )
-
-      setPdfFile(newFile)
-
-      setSelectedPages([])
-
-      setRotation(0)
-
-      if (currentIndex !== -1) {
-
-        setCurrentPage(
-          currentIndex + 1,
-        )
-      }
-
-    } catch (error) {
-
-      console.error(error)
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'Failed to reorder pages.',
-      )
-
-    } finally {
-
-      setProcessing(false)
-    }
-  }
-
-
-  /*
-   * Extract selected pages.
-   */
-
-  const handleExtractPages = async () => {
-
-    if (!pdfFile) return
-
-    if (selectedPages.length === 0) {
-
-      alert(
-        'Select at least one page first.',
-      )
-
-      return
-    }
-
-    try {
-
-      setProcessing(true)
-
-      const newFile =
-        await extractPages(
-          pdfFile,
-          selectedPages,
-        )
-
-      setPdfFile(newFile)
-
-      setCurrentPage(1)
-
-      setSelectedPages([])
-
-      setRotation(0)
-
-    } catch (error) {
-
-      console.error(error)
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'Failed to extract pages.',
-      )
-
-    } finally {
-
-      setProcessing(false)
-    }
-  }
-
   const replacePdfFile = (
     file: File,
   ) => {
-    setPdfFile(file)
+    pdfDocument.replacePdfFile(
+      file,
+    )
 
-    setSelectedPages([])
-    setRotation(0)
+    pages.setCurrentPage(1)
+
+    pages.setSelectedPages([])
+
+    view.setRotation(0)
+
+    pdfDocument.setIsDirty(false)
   }
-
 
   /*
    * Save current PDF.
    */
-
   const savePDF = () => {
+    const pdfFile =
+      pdfDocument.pdfFile
 
     if (!pdfFile) return
 
@@ -563,51 +131,110 @@ export function usePDFEditor() {
 
     link.remove()
 
+    pdfDocument.setIsDirty(false)
+
     /*
-     * Give the browser a moment to start
-     * the download before revoking the URL.
+     * Give the browser a moment
+     * to start the download before
+     * revoking the object URL.
      */
     setTimeout(() => {
       URL.revokeObjectURL(url)
     }, 1000)
   }
 
-
   return {
-    pdfFile,
-    pdfUrl,
+    /*
+     * Document
+     */
+    pdfFile:
+      pdfDocument.pdfFile,
 
-    numPages,
-    setNumPages,
+    pdfUrl:
+      pdfDocument.pdfUrl,
 
-    currentPage,
-    setCurrentPage,
-
-    selectedPages,
-    setSelectedPages,
-
-    zoom,
-    rotation,
-
-    processing,
+    isDirty:
+        pdfDocument.isDirty,
+    
+    setIsDirty:
+        pdfDocument.setIsDirty,
 
     openPDF,
 
-    zoomIn,
-    zoomOut,
-    resetZoom,
-    rotateView,
-
-    previousPage,
-    nextPage,
-
-    handleDeletePages,
-    handleRotatePages,
-    handleDuplicatePage,
-    handleReorder,
-    handleExtractPages,
-
-    savePDF,
     replacePdfFile,
+
+    /*
+     * Pages
+     */
+    numPages:
+      pages.numPages,
+
+    setNumPages:
+      pages.setNumPages,
+
+    currentPage:
+      pages.currentPage,
+
+    setCurrentPage:
+      pages.setCurrentPage,
+
+    selectedPages:
+      pages.selectedPages,
+
+    setSelectedPages:
+      pages.setSelectedPages,
+
+    previousPage:
+      pages.previousPage,
+
+    nextPage:
+      pages.nextPage,
+
+    /*
+     * View
+     */
+    zoom:
+      view.zoom,
+
+    rotation:
+      view.rotation,
+
+    zoomIn:
+      view.zoomIn,
+
+    zoomOut:
+      view.zoomOut,
+
+    resetZoom:
+      view.resetZoom,
+
+    rotateView:
+      view.rotateView,
+
+    /*
+     * Operations
+     */
+    processing:
+      operations.processing,
+
+    handleDeletePages:
+      operations.handleDeletePages,
+
+    handleRotatePages:
+      operations.handleRotatePages,
+
+    handleDuplicatePage:
+      operations.handleDuplicatePage,
+
+    handleReorder:
+      operations.handleReorder,
+
+    handleExtractPages:
+      operations.handleExtractPages,
+
+    /*
+     * Save
+     */
+    savePDF,
   }
 }

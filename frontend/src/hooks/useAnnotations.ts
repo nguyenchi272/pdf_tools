@@ -11,7 +11,13 @@ interface AnnotationHistory {
   future: Annotation[][]
 }
 
-export default function useAnnotations() {
+interface UseAnnotationsOptions {
+  onChange?: () => void
+}
+
+export default function useAnnotations({
+    onChange,
+}: UseAnnotationsOptions = {}) {
   const [history, setHistory] =
     useState<AnnotationHistory>({
       past: [],
@@ -31,6 +37,8 @@ export default function useAnnotations() {
         present: nextAnnotations,
         future: [],
       }))
+
+      onChange?.()
     },
     [],
   )
@@ -70,6 +78,8 @@ export default function useAnnotations() {
         ...annotations,
         annotation,
       ])
+
+      onChange?.()
     },
     [annotations, updateAnnotations],
   )
@@ -106,6 +116,8 @@ export default function useAnnotations() {
         ...annotations,
         annotation,
       ])
+
+      onChange?.()
     },
     [annotations, updateAnnotations],
   )
@@ -128,6 +140,8 @@ export default function useAnnotations() {
       updateAnnotations(
         nextAnnotations,
       )
+
+      onChange?.()
     },
     [annotations, updateAnnotations],
   )
@@ -157,6 +171,8 @@ export default function useAnnotations() {
         ],
       }
     })
+
+    onChange?.()
   }, [])
 
   const redo = useCallback(() => {
@@ -180,6 +196,8 @@ export default function useAnnotations() {
           current.future.slice(1),
       }
     })
+
+    onChange?.()
   }, [])
 
   const canUndo =

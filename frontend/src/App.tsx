@@ -11,6 +11,7 @@ import PDFViewer from './components/PDFViewer'
 import Sidebar from './components/Sidebar'
 import Toolbar from './components/Toolbar'
 import TopMenu from './components/menus/TopMenu'
+import UnsavedChangesDialog from './components/UnsavedChangesDialog'
 
 import {
   usePDFEditor,
@@ -62,7 +63,11 @@ export default function App() {
     redo,
     canUndo,
     canRedo,
-  } = useAnnotations()
+  } = useAnnotations({
+    onChange: () => {
+      editor.setIsDirty(true)
+    },
+  })
 
 
   const [
@@ -82,7 +87,6 @@ export default function App() {
     setIsSaving,
   ] = useState(false)
 
-
   /*
    * =====================================================
    * TOP MENU
@@ -101,6 +105,39 @@ export default function App() {
    * SAVE PDF
    * =====================================================
    */
+
+  const [showUnsavedDialog, setShowUnsavedDialog] =
+    useState(false)
+
+  const [pendingOpen, setPendingOpen] =
+    useState(false)
+
+  const handleOpenPDF = () => {
+    if (!editor.pdfFile || !editor.isDirty) {
+      editor.openPDF()
+      return
+    }
+
+    setShowUnsavedDialog(true)
+  }
+
+  const handleDontSave = () => {
+    setShowUnsavedDialog(false)
+
+    editor.openPDF()
+  }
+
+  const handleCancelOpen = () => {
+    setShowUnsavedDialog(false)
+  }
+
+  const handleSaveBeforeOpen = () => {
+    editor.savePDF()
+
+    setShowUnsavedDialog(false)
+
+    editor.openPDF()
+  }
 
   const handleSaveAnnotations =
     async () => {
@@ -192,7 +229,7 @@ export default function App() {
   useKeyboardShortcuts({
 
     onOpen:
-      editor.openPDF,
+      handleOpenPDF,
 
     onSave:
       handleSaveAnnotations,
@@ -287,7 +324,18 @@ export default function App() {
       <header className="topbar">
 
         <div className="brand">
-          OpenPDF
+          <span>
+            OpenPDF
+          </span>
+
+          {editor.isDirty && (
+            <span
+              className="unsaved-indicator"
+              title="Unsaved changes"
+            >
+              *
+            </span>
+          )}
         </div>
 
 
@@ -315,7 +363,7 @@ export default function App() {
            */
 
           onOpen={
-            editor.openPDF
+            handleOpenPDF
           }
 
           onSave={
@@ -456,7 +504,7 @@ export default function App() {
          */
 
         onOpen={
-          editor.openPDF
+          handleOpenPDF
         }
 
         onSave={
@@ -735,6 +783,13 @@ export default function App() {
 
         </span>
 
+        <span>
+          {editor.isDirty && (
+            <span className="status-unsaved">
+              Modified
+            </span>
+          )}
+        </span>
 
         <span>
 
@@ -751,6 +806,13 @@ export default function App() {
         </span>
 
       </footer>
+
+      <UnsavedChangesDialog
+        open={showUnsavedDialog}
+        onCancel={handleCancelOpen}
+        onDontSave={handleDontSave}
+        onSave={handleSaveBeforeOpen}
+      />
 
     </div>
   )
