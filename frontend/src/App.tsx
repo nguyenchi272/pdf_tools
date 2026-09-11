@@ -3,13 +3,14 @@ import {
 } from 'lucide-react'
 
 import {
-  useState, useEffect
+  useState,
+  useEffect,
 } from 'react'
-
 
 import PDFViewer from './components/PDFViewer'
 import Sidebar from './components/Sidebar'
 import Toolbar from './components/Toolbar'
+import TopMenu from './components/menus/TopMenu'
 
 import {
   usePDFEditor,
@@ -18,17 +19,26 @@ import {
 import useAnnotations
   from './hooks/useAnnotations'
 
+import useTopMenu
+  from './hooks/useTopMenu'
+
+import useKeyboardShortcuts
+  from './hooks/useKeyboardShortcuts'
+
 import type {
   AnnotationType,
 } from './types/annotation'
 
-import { saveAnnotations } from './api/pdfApi'
+import {
+  saveAnnotations,
+} from './api/pdfApi'
+
 
 export default function App() {
 
   /*
    * =====================================================
-   * PDF EDITOR STATE
+   * PDF EDITOR
    * =====================================================
    */
 
@@ -38,7 +48,7 @@ export default function App() {
 
   /*
    * =====================================================
-   * ANNOTATION STATE
+   * ANNOTATIONS
    * =====================================================
    */
 
@@ -47,7 +57,6 @@ export default function App() {
     addAnnotation,
     addNote,
     removeAnnotation,
-    clearAnnotations,
     replaceAnnotations,
     undo,
     redo,
@@ -61,141 +70,204 @@ export default function App() {
     setAnnotationMode,
   ] = useState<AnnotationType | null>(null)
 
-  const [isSaving, setIsSaving] =
-    useState(false)
 
-  useEffect(() => {
-  const handleKeyDown = (
-    event: KeyboardEvent,
-  ) => {
-    const target =
-      event.target as HTMLElement | null
+  /*
+   * =====================================================
+   * SAVE STATE
+   * =====================================================
+   */
 
-    const isEditing =
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement ||
-      target?.isContentEditable
+  const [
+    isSaving,
+    setIsSaving,
+  ] = useState(false)
 
-    if (isEditing) {
-      return
-    }
-    const isModifier =
-      event.ctrlKey ||
-      event.metaKey
 
-    if (!isModifier) {
-      return
-    }
+  /*
+   * =====================================================
+   * TOP MENU
+   * =====================================================
+   */
 
-    if (
-      event.key.toLowerCase() === 'z'
-    ) {
-      event.preventDefault()
+  const {
+    openTopMenu,
+    toggleTopMenu,
+    closeTopMenu,
+  } = useTopMenu()
 
-      if (event.shiftKey) {
-        redo()
-      } else {
-        undo()
+
+  /*
+   * =====================================================
+   * SAVE PDF
+   * =====================================================
+   */
+
+  const handleSaveAnnotations =
+    async () => {
+
+      if (!editor.pdfUrl) {
+        return
       }
 
-      return
-    }
+      try {
 
-    if (
-      event.key.toLowerCase() === 'y'
-    ) {
-      event.preventDefault()
-      redo()
-    }
-  }
+        setIsSaving(true)
 
-  window.addEventListener(
-    'keydown',
-    handleKeyDown,
-  )
+        const newFile =
+          await saveAnnotations(
+            editor.pdfUrl,
+            annotations,
+          )
 
-  return () => {
-    window.removeEventListener(
-      'keydown',
-      handleKeyDown,
-    )
-  }
-}, [undo, redo])
 
-const handleSaveAnnotations =
-  async () => {
-
-    if (!editor.pdfUrl) {
-      return
-    }
-
-    try {
-
-      setIsSaving(true)
-
-      const newFile =
-        await saveAnnotations(
-          editor.pdfUrl,
-          annotations,
-        )
-
-      /*
-       * Make the newly generated PDF
-       * the actual current PDF.
-       */
-      editor.replacePdfFile(
-        newFile,
-      )
-
-      /*
-       * Download the newly generated PDF.
-       */
-      const url =
-        URL.createObjectURL(
+        /*
+         * Make the newly generated PDF
+         * the current PDF.
+         */
+        editor.replacePdfFile(
           newFile,
         )
 
-      const link =
-        document.createElement('a')
 
-      link.href = url
+        /*
+         * Download the generated PDF.
+         */
+        const url =
+          URL.createObjectURL(
+            newFile,
+          )
 
-      link.download =
-        newFile.name ||
-        'annotated.pdf'
+        const link =
+          document.createElement('a')
 
-      document.body.appendChild(
-        link,
-      )
+        link.href = url
 
-      link.click()
+        link.download =
+          newFile.name ||
+          'annotated.pdf'
 
-      link.remove()
+        document.body.appendChild(
+          link,
+        )
 
-      setTimeout(() => {
-        URL.revokeObjectURL(url)
-      }, 1000)
+        link.click()
 
-    } catch (error) {
+        link.remove()
 
-      console.error(
-        'Failed to save annotations:',
-        error,
-      )
 
-      window.alert(
-        error instanceof Error
-          ? error.message
-          : 'Failed to save annotations.',
-      )
+        /*
+         * Release object URL.
+         */
+        setTimeout(() => {
+          URL.revokeObjectURL(url)
+        }, 1000)
 
-    } finally {
+      } catch (error) {
 
-      setIsSaving(false)
+        console.error(
+          'Failed to save annotations:',
+          error,
+        )
+
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : 'Failed to save annotations.',
+        )
+
+      } finally {
+
+        setIsSaving(false)
+
+      }
+    }
+
+
+  /*
+   * =====================================================
+   * KEYBOARD SHORTCUTS
+   * =====================================================
+   */
+
+  useKeyboardShortcuts({
+
+    onOpen:
+      editor.openPDF,
+
+    onSave:
+      handleSaveAnnotations,
+
+    onUndo:
+      undo,
+
+    onRedo:
+      redo,
+
+    onZoomIn:
+      editor.zoomIn,
+
+    onZoomOut:
+      editor.zoomOut,
+
+    onCloseMenu:
+      closeTopMenu,
+
+    disabled:
+      editor.processing ||
+      isSaving,
+
+    hasPDF:
+      !!editor.pdfFile,
+
+  })
+
+
+  /*
+   * =====================================================
+   * CLOSE TOP MENU
+   * WHEN CLICKING OUTSIDE
+   * =====================================================
+   */
+
+  useEffect(() => {
+
+    const handleMouseDown = (
+      event: MouseEvent,
+    ) => {
+
+      const target =
+        event.target as HTMLElement | null
+
+      if (
+        !target?.closest(
+          '.top-menu',
+        )
+      ) {
+        closeTopMenu()
+      }
 
     }
-  }
+
+
+    document.addEventListener(
+      'mousedown',
+      handleMouseDown,
+    )
+
+
+    return () => {
+
+      document.removeEventListener(
+        'mousedown',
+        handleMouseDown,
+      )
+
+    }
+
+  }, [
+    closeTopMenu,
+  ])
+
 
   /*
    * =====================================================
@@ -207,9 +279,10 @@ const handleSaveAnnotations =
 
     <div className="app">
 
-      {/* =========================
+
+      {/* =================================================
           TOP BAR
-          ========================= */}
+          ================================================= */}
 
       <header className="topbar">
 
@@ -218,44 +291,137 @@ const handleSaveAnnotations =
         </div>
 
 
-        <nav className="menu">
+        <TopMenu
 
-          <button
-            onClick={
-              editor.openPDF
-            }
-          >
-            File
-          </button>
+          /*
+           * Menu state
+           */
 
+          openTopMenu={
+            openTopMenu
+          }
 
-          <button>
-            Edit
-          </button>
+          toggleTopMenu={
+            toggleTopMenu
+          }
 
-
-          <button>
-            View
-          </button>
+          closeTopMenu={
+            closeTopMenu
+          }
 
 
-          <button>
-            Tools
-          </button>
+          /*
+           * File
+           */
+
+          onOpen={
+            editor.openPDF
+          }
+
+          onSave={
+            handleSaveAnnotations
+          }
+
+          hasPDF={
+            !!editor.pdfFile
+          }
+
+          processing={
+            editor.processing
+          }
+
+          isSaving={
+            isSaving
+          }
 
 
-          <button>
-            Help
-          </button>
+          /*
+           * Edit
+           */
 
-        </nav>
+          onUndo={
+            undo
+          }
+
+          onRedo={
+            redo
+          }
+
+          canUndo={
+            canUndo
+          }
+
+          canRedo={
+            canRedo
+          }
+
+
+          /*
+           * View
+           */
+
+          onZoomIn={
+            editor.zoomIn
+          }
+
+          onZoomOut={
+            editor.zoomOut
+          }
+
+          onResetZoom={
+            editor.resetZoom
+          }
+
+          onRotateView={
+            editor.rotateView
+          }
+
+
+          /*
+           * Pages
+           */
+
+          selectedPages={
+            editor.selectedPages
+          }
+
+          onDelete={
+            editor.handleDeletePages
+          }
+
+          onDuplicate={
+            editor.handleDuplicatePage
+          }
+
+          onRotate={
+            editor.handleRotatePages
+          }
+
+          onExtract={
+            editor.handleExtractPages
+          }
+
+
+          /*
+           * Annotation
+           */
+
+          annotationMode={
+            annotationMode
+          }
+
+          onAnnotationModeChange={
+            setAnnotationMode
+          }
+
+        />
 
       </header>
 
 
-      {/* =========================
+      {/* =================================================
           TOOLBAR
-          ========================= */}
+          ================================================= */}
 
       <Toolbar
 
@@ -264,7 +430,8 @@ const handleSaveAnnotations =
         }
 
         processing={
-          editor.processing || isSaving
+          editor.processing ||
+          isSaving
         }
 
         currentPage={
@@ -364,17 +531,33 @@ const handleSaveAnnotations =
           setAnnotationMode
         }
 
-        onUndo={undo}
-        onRedo={redo}
-        canUndo={canUndo}
-        canRedo={canRedo}
+
+        /*
+         * Annotation history
+         */
+
+        onUndo={
+          undo
+        }
+
+        onRedo={
+          redo
+        }
+
+        canUndo={
+          canUndo
+        }
+
+        canRedo={
+          canRedo
+        }
 
       />
 
 
-      {/* =========================
+      {/* =================================================
           MAIN CONTENT
-          ========================= */}
+          ================================================= */}
 
       <main className="main-content">
 
@@ -382,9 +565,10 @@ const handleSaveAnnotations =
 
           <>
 
-            {/* =========================
+
+            {/* =========================================
                 SIDEBAR
-                ========================= */}
+                ========================================= */}
 
             <Sidebar
 
@@ -419,11 +603,13 @@ const handleSaveAnnotations =
             />
 
 
-            {/* =========================
+            {/* =========================================
                 PDF VIEWER
-                ========================= */}
+                ========================================= */}
 
-            <section className="viewer-container">
+            <section
+              className="viewer-container"
+            >
 
               <PDFViewer
 
@@ -460,13 +646,18 @@ const handleSaveAnnotations =
                   addAnnotation
                 }
 
-                onAddNote={addNote}
+                onAddNote={
+                  addNote
+                }
 
-                onRemoveAnnotation={removeAnnotation}
+                onRemoveAnnotation={
+                  removeAnnotation
+                }
 
                 onLoadAnnotations={
                   replaceAnnotations
                 }
+
 
                 /*
                  * PDF state
@@ -488,13 +679,16 @@ const handleSaveAnnotations =
 
         ) : (
 
-          /* =========================
+
+          /* ===========================================
              EMPTY STATE
-             ========================= */
+             =========================================== */
 
           <div className="empty-state">
 
-            <FilePlus size={64} />
+            <FilePlus
+              size={64}
+            />
 
 
             <h2>
@@ -524,15 +718,16 @@ const handleSaveAnnotations =
       </main>
 
 
-      {/* =========================
+      {/* =================================================
           STATUS BAR
-          ========================= */}
+          ================================================= */}
 
       <footer className="statusbar">
 
         <span>
 
-          {editor.processing
+          {editor.processing ||
+          isSaving
             ? 'Processing PDF...'
             : editor.pdfFile
               ? editor.pdfFile.name
@@ -544,9 +739,13 @@ const handleSaveAnnotations =
         <span>
 
           {annotationMode
+
             ? `Annotation: ${annotationMode}`
+
             : editor.selectedPages.length > 0
+
               ? `${editor.selectedPages.length} page(s) selected`
+
               : 'Ready'}
 
         </span>
