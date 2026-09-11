@@ -18,6 +18,7 @@ export default function HelpMenu({
       [
         'OpenPDF Keyboard Shortcuts',
         '',
+        'Ctrl+N    New PDF',
         'Ctrl+O    Open PDF',
         'Ctrl+S    Save PDF',
         'Ctrl+Z    Undo',

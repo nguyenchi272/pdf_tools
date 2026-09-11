@@ -26,6 +26,8 @@ import useTopMenu
 import useKeyboardShortcuts
   from './hooks/useKeyboardShortcuts'
 
+import useBeforeUnload from './hooks/useBeforeUnload'
+
 import type {
   AnnotationType,
 } from './types/annotation'
@@ -46,7 +48,7 @@ export default function App() {
   const editor =
     usePDFEditor()
 
-
+  useBeforeUnload(editor.isDirty)
   /*
    * =====================================================
    * ANNOTATIONS
@@ -109,8 +111,40 @@ export default function App() {
   const [showUnsavedDialog, setShowUnsavedDialog] =
     useState(false)
 
-  const [pendingOpen, setPendingOpen] =
-    useState(false)
+  type PendingAction =
+    | 'open'
+    | 'new'
+    | 'close'
+    | null
+
+  const [pendingAction, setPendingAction] =
+    useState<PendingAction>(null)
+
+  const executePendingAction = () => {
+    if (pendingAction === 'open') {
+      editor.openPDF()
+    }
+
+    if (pendingAction === 'new') {
+      editor.closePDF()
+    }
+
+    if (pendingAction === 'close') {
+      editor.closePDF()
+    }
+
+    setPendingAction(null)
+  }
+
+  const handleNewPDF = () => {
+    if (!editor.pdfFile || !editor.isDirty) {
+      editor.closePDF()
+      return
+    }
+
+    setPendingAction('new')
+    setShowUnsavedDialog(true)
+  }
 
   const handleOpenPDF = () => {
     if (!editor.pdfFile || !editor.isDirty) {
@@ -118,25 +152,37 @@ export default function App() {
       return
     }
 
+    setPendingAction('open')
+    setShowUnsavedDialog(true)
+  }
+
+  const handleClosePDF = () => {
+    if (!editor.pdfFile || !editor.isDirty) {
+      editor.closePDF()
+      return
+    }
+
+    setPendingAction('close')
     setShowUnsavedDialog(true)
   }
 
   const handleDontSave = () => {
     setShowUnsavedDialog(false)
 
-    editor.openPDF()
+    executePendingAction()
   }
 
-  const handleCancelOpen = () => {
+  const handleCancelUnsaved = () => {
     setShowUnsavedDialog(false)
+    setPendingAction(null)
   }
 
-  const handleSaveBeforeOpen = () => {
+  const handleSaveBeforeAction = () => {
     editor.savePDF()
 
     setShowUnsavedDialog(false)
 
-    editor.openPDF()
+    executePendingAction()
   }
 
   const handleSaveAnnotations =
@@ -227,6 +273,8 @@ export default function App() {
    */
 
   useKeyboardShortcuts({
+    onNew:
+      handleNewPDF,
 
     onOpen:
       handleOpenPDF,
@@ -361,6 +409,9 @@ export default function App() {
           /*
            * File
            */
+          onNew={
+            handleNewPDF
+          }
 
           onOpen={
             handleOpenPDF
@@ -368,6 +419,10 @@ export default function App() {
 
           onSave={
             handleSaveAnnotations
+          }
+
+          onClosePDF={
+            handleClosePDF
           }
 
           hasPDF={
@@ -809,9 +864,9 @@ export default function App() {
 
       <UnsavedChangesDialog
         open={showUnsavedDialog}
-        onCancel={handleCancelOpen}
+        onCancel={handleCancelUnsaved}
         onDontSave={handleDontSave}
-        onSave={handleSaveBeforeOpen}
+        onSave={handleSaveBeforeAction}
       />
 
     </div>

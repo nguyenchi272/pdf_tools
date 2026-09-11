@@ -45,8 +45,7 @@ export default function UnsavedChangesDialog({
 
           <p>
             This PDF has unsaved changes.
-            Do you want to save them before
-            opening another PDF?
+            Do you want to save them?
           </p>
         </div>
 

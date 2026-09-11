@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 
 interface KeyboardShortcutOptions {
+  onNew: () => void
   onOpen: () => void
   onSave: () => void
 
@@ -17,6 +18,7 @@ interface KeyboardShortcutOptions {
 }
 
 export default function useKeyboardShortcuts({
+  onNew,
   onOpen,
   onSave,
   onUndo,
@@ -65,6 +67,14 @@ export default function useKeyboardShortcuts({
 
       const key =
         event.key.toLowerCase()
+
+    //   Ctrl + N
+      if (key === 'n') {
+        event.preventDefault()
+        onCloseMenu()
+        onNew()
+        return
+      }
 
       /*
        * Ctrl + O
@@ -161,6 +171,7 @@ export default function useKeyboardShortcuts({
     }
 
   }, [
+    onNew,
     onOpen,
     onSave,
     onUndo,

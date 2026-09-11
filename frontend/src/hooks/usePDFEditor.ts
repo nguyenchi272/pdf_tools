@@ -81,6 +81,17 @@ export function usePDFEditor() {
     )
   }
 
+  const closePDF = () => {
+    pdfDocument.setPdfFile(null)
+
+    pages.resetPages()
+
+    view.setZoom(1)
+    view.setRotation(0)
+
+    pdfDocument.setIsDirty(false)
+  }
+
   /*
    * Replace current PDF.
    *
@@ -160,6 +171,8 @@ export function usePDFEditor() {
         pdfDocument.setIsDirty,
 
     openPDF,
+
+    closePDF,
 
     replacePdfFile,
 

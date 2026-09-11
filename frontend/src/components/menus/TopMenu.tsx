@@ -29,8 +29,10 @@ interface TopMenuProps {
   /*
    * File
    */
+  onNew: () => void
   onOpen: () => void
   onSave: () => void
+  onClosePDF: () => void
   hasPDF: boolean
   processing: boolean
   isSaving: boolean
@@ -103,8 +105,10 @@ export default function TopMenu({
   toggleTopMenu,
   closeTopMenu,
 
+  onNew,
   onOpen,
   onSave,
+  onClosePDF,
   hasPDF,
   processing,
   isSaving,
@@ -137,9 +141,11 @@ export default function TopMenu({
         case 'file':
           return (
             <FileMenu
+              onNew={onNew}
               onOpen={onOpen}
               onSave={onSave}
               onClose={closeTopMenu}
+              onClosePDF={onClosePDF}
               hasPDF={hasPDF}
               processing={processing}
               isSaving={isSaving}
