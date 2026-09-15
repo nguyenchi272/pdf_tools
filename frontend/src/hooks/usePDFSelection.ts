@@ -23,7 +23,7 @@ export default function usePDFSelection({
   onAddAnnotation,
 }: UsePDFSelectionOptions) {
   const handleMouseUp = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
+    () => {
       /*
        * Note does not use text selection.
        */

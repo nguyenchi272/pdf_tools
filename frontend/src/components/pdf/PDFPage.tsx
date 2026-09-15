@@ -63,6 +63,9 @@ interface PDFPageProps {
     y: number,
   ) => void
 
+  onBeginMoveText: () => void
+  onEndMoveText: () => void
+
   onRemoveText: (
     id: string,
   ) => void
@@ -108,6 +111,8 @@ export default function PDFPage({
   onAddText,
   onUpdateText,
   onMoveText,
+  onBeginMoveText,
+  onEndMoveText,
   onRemoveText,
 
   onRemoveAnnotation,
@@ -233,6 +238,7 @@ export default function PDFPage({
     }
 
     const handleMouseUp = () => {
+        onEndMoveText(),
         setDraggingText(null)
     }
 
@@ -261,6 +267,7 @@ export default function PDFPage({
     draggingText,
     zoom,
     onMoveText,
+    onEndMoveText,
     ])
 
   /*
@@ -946,6 +953,8 @@ export default function PDFPage({
     setSelectedTextId(
         element.id,
     )
+
+    onBeginMoveText()
 
     setDraggingText({
         id: element.id,

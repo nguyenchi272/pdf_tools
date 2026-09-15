@@ -67,6 +67,9 @@ interface PDFViewerProps {
     y: number,
   ) => void
 
+  onBeginMoveText: () => void
+  onEndMoveText: () => void
+
   onAddAnnotation: (
     page: number,
     type: AnnotationType,
@@ -121,6 +124,8 @@ export default function PDFViewer({
   onUpdateText,
   onRemoveText,
   onMoveText,
+  onBeginMoveText,
+  onEndMoveText,
 
   onNumPages,
   onPageChange,
@@ -509,6 +514,10 @@ export default function PDFViewer({
               onUpdateText={onUpdateText}
 
               onMoveText={onMoveText}
+
+              onBeginMoveText={onBeginMoveText}
+
+              onEndMoveText={onEndMoveText}
 
               onRemoveText={onRemoveText}
 

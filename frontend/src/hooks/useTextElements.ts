@@ -1,16 +1,63 @@
-import { useCallback, useState } from 'react'
+import {
+  useCallback,
+  useRef,
+  useState,
+} from 'react'
+
 import type { TextElement } from '../types/text'
 
 interface UseTextElementsOptions {
-  onChange?: () => void
+  onChange?: (
+    previous: TextElement[],
+    next: TextElement[],
+  ) => void
 }
 
 export default function useTextElements({
   onChange,
 }: UseTextElementsOptions = {}) {
-  const [textElements, setTextElements] =
-    useState<TextElement[]>([])
+  const [
+    textElements,
+    setTextElements,
+  ] = useState<TextElement[]>([])
 
+  /*
+   * Ref luôn chứa state mới nhất.
+   * Dùng ref để tránh stale state trong
+   * drag và Unified History.
+   */
+  const elementsRef =
+    useRef<TextElement[]>([])
+
+  /*
+   * Snapshot trước khi bắt đầu drag.
+   */
+  const dragStartRef =
+    useRef<TextElement[] | null>(
+      null,
+    )
+
+  const commit = useCallback(
+    (next: TextElement[]) => {
+      const previous =
+        elementsRef.current
+
+      elementsRef.current =
+        next
+
+      setTextElements(next)
+
+      onChange?.(
+        previous,
+        next,
+      )
+    },
+    [onChange],
+  )
+
+  /*
+   * ADD
+   */
   const addText = useCallback(
     (
       page: number,
@@ -18,7 +65,8 @@ export default function useTextElements({
       y: number,
       text: string,
     ) => {
-      const trimmedText = text.trim()
+      const trimmedText =
+        text.trim()
 
       if (!trimmedText) {
         return
@@ -35,134 +83,205 @@ export default function useTextElements({
         fontSize: 14,
       }
 
-      setTextElements((current) => [
-        ...current,
+      commit([
+        ...elementsRef.current,
         element,
       ])
-
-      onChange?.()
     },
-    [onChange],
+    [commit],
   )
 
+  /*
+   * EDIT
+   */
+  const updateText = useCallback(
+    (
+      id: string,
+      text: string,
+    ) => {
+      const trimmedText =
+        text.trim()
+
+      if (!trimmedText) {
+        return
+      }
+
+      const current =
+        elementsRef.current
+
+      const exists =
+        current.some(
+          (element) =>
+            element.id === id,
+        )
+
+      if (!exists) {
+        return
+      }
+
+      const next =
+        current.map((element) =>
+          element.id === id
+            ? {
+                ...element,
+                text: trimmedText,
+              }
+            : element,
+        )
+
+      commit(next)
+    },
+    [commit],
+  )
+
+  /*
+   * DELETE
+   */
   const removeText = useCallback(
     (id: string) => {
-      setTextElements((current) => {
-        const next = current.filter(
+      const current =
+        elementsRef.current
+
+      const next =
+        current.filter(
           (element) =>
             element.id !== id,
         )
 
-        if (
-          next.length ===
-          current.length
-        ) {
-          return current
-        }
+      if (
+        next.length ===
+        current.length
+      ) {
+        return
+      }
 
-        onChange?.()
-
-        return next
-      })
+      commit(next)
     },
-    [onChange],
+    [commit],
   )
 
-  const updateText = useCallback(
-    (
-        id: string,
-        text: string,
-    ) => {
-        const trimmedText = text.trim()
-
-        if (!trimmedText) {
-        return
-        }
-
-        setTextElements((current) => {
-        const exists = current.some(
-            (element) => element.id === id,
+  /*
+   * DRAG - BEGIN
+   */
+  const beginMoveText =
+    useCallback(() => {
+      dragStartRef.current =
+        elementsRef.current.map(
+          (element) => ({
+            ...element,
+          }),
         )
+    }, [])
 
-        if (!exists) {
-            return current
-        }
-
-        onChange?.()
-
-        return current.map((element) =>
-            element.id === id
-            ? {
-                ...element,
-                text: trimmedText,
-                }
-            : element,
-        )
-        })
-    },
-    [onChange],
-    )
-
+  /*
+   * DRAG - PREVIEW
+   *
+   * Không ghi history ở đây.
+   */
   const moveText = useCallback(
     (
-        id: string,
-        x: number,
-        y: number,
+      id: string,
+      x: number,
+      y: number,
     ) => {
-        setTextElements((current) => {
-        const exists = current.some(
-            (element) =>
-            element.id === id,
-        )
-
-        if (!exists) {
-            return current
-        }
-
-        onChange?.()
-
-        return current.map(
-            (element) =>
+      const next =
+        elementsRef.current.map(
+          (element) =>
             element.id === id
-                ? {
-                    ...element,
-                    x,
-                    y,
+              ? {
+                  ...element,
+                  x,
+                  y,
                 }
-                : element,
+              : element,
         )
-        })
-    },
-    [onChange],
-    )
 
+      elementsRef.current =
+        next
+
+      setTextElements(next)
+    },
+    [],
+  )
+
+  /*
+   * DRAG - END
+   *
+   * Chỉ ghi đúng 1 history entry.
+   */
+  const endMoveText =
+    useCallback(() => {
+      const previous =
+        dragStartRef.current
+
+      const current =
+        elementsRef.current
+
+      dragStartRef.current =
+        null
+
+      if (!previous) {
+        return
+      }
+
+      if (
+        JSON.stringify(previous) ===
+        JSON.stringify(current)
+      ) {
+        return
+      }
+
+      onChange?.(
+        previous,
+        current,
+      )
+    }, [onChange])
+
+  /*
+   * LOAD / RESTORE
+   *
+   * Không tạo history.
+   */
   const replaceTextElements =
     useCallback(
       (elements: TextElement[]) => {
+        elementsRef.current =
+          elements
+
         setTextElements(elements)
+
+        dragStartRef.current =
+          null
       },
       [],
     )
 
+  /*
+   * CLEAR
+   */
   const clearTextElements =
     useCallback(() => {
-      setTextElements((current) => {
-        if (current.length === 0) {
-          return current
-        }
+      const current =
+        elementsRef.current
 
-        onChange?.()
+      if (current.length === 0) {
+        return
+      }
 
-        return []
-      })
-    }, [onChange])
+      commit([])
+    }, [commit])
 
   return {
     textElements,
+
     addText,
     updateText,
-    moveText,
     removeText,
+
+    beginMoveText,
+    moveText,
+    endMoveText,
+
     replaceTextElements,
     clearTextElements,
   }

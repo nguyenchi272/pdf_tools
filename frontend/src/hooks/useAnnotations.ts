@@ -1,222 +1,186 @@
-import { useCallback, useState } from 'react'
+import {
+  useCallback,
+  useRef,
+  useState,
+} from 'react'
+
 import type {
   Annotation,
   AnnotationRect,
   AnnotationType,
 } from '../types/annotation'
 
-interface AnnotationHistory {
-  past: Annotation[][]
-  present: Annotation[]
-  future: Annotation[][]
-}
-
 interface UseAnnotationsOptions {
-  onChange?: () => void
+  onChange?: (
+    previous: Annotation[],
+    next: Annotation[],
+  ) => void
 }
 
 export default function useAnnotations({
-    onChange,
+  onChange,
 }: UseAnnotationsOptions = {}) {
-  const [history, setHistory] =
-    useState<AnnotationHistory>({
-      past: [],
-      present: [],
-      future: [],
-    })
+  const [
+    annotations,
+    setAnnotations,
+  ] = useState<Annotation[]>([])
 
-  const annotations = history.present
+  const annotationsRef =
+    useRef<Annotation[]>([])
 
-  const updateAnnotations = useCallback(
-    (nextAnnotations: Annotation[]) => {
-      setHistory((current) => ({
-        past: [
-          ...current.past,
-          current.present,
-        ],
-        present: nextAnnotations,
-        future: [],
-      }))
-
-      onChange?.()
-    },
-    [],
-  )
-
-  const replaceAnnotations = useCallback(
-    (nextAnnotations: Annotation[]) => {
-        setHistory({
-        past: [],
-        present: nextAnnotations,
-        future: [],
-        })
-    },
-    [],
-  )
-
-  const addAnnotation = useCallback(
-    (
-      page: number,
-      type: AnnotationType,
-      rects: AnnotationRect[],
-    ) => {
-      if (
-        rects.length === 0 ||
-        type === 'note'
-      ) {
-        return
-      }
-
-      const annotation: Annotation = {
-        id: crypto.randomUUID(),
-        page,
-        type,
-        rects,
-      }
-
-      updateAnnotations([
-        ...annotations,
-        annotation,
-      ])
-
-      onChange?.()
-    },
-    [annotations, updateAnnotations],
-  )
-
-  const addNote = useCallback(
-    (
-      page: number,
-      x: number,
-      y: number,
-      text: string,
-    ) => {
-      const trimmedText = text.trim()
-
-      if (!trimmedText) {
-        return
-      }
-
-      const annotation: Annotation = {
-        id: crypto.randomUUID(),
-        page,
-        type: 'note',
-        rects: [
-          {
-            x,
-            y,
-            width: 24,
-            height: 24,
-          },
-        ],
-        text: trimmedText,
-      }
-
-      updateAnnotations([
-        ...annotations,
-        annotation,
-      ])
-
-      onChange?.()
-    },
-    [annotations, updateAnnotations],
-  )
-
-  const removeAnnotation = useCallback(
-    (id: string) => {
-      const nextAnnotations =
-        annotations.filter(
-          (annotation) =>
-            annotation.id !== id,
-        )
-
-      if (
-        nextAnnotations.length ===
-        annotations.length
-      ) {
-        return
-      }
-
-      updateAnnotations(
-        nextAnnotations,
-      )
-
-      onChange?.()
-    },
-    [annotations, updateAnnotations],
-  )
-
-  const undo = useCallback(() => {
-    setHistory((current) => {
-      if (current.past.length === 0) {
-        return current
-      }
-
+  const commit = useCallback(
+    (next: Annotation[]) => {
       const previous =
-        current.past[
-          current.past.length - 1
-        ]
+        annotationsRef.current
 
-      return {
-        past: current.past.slice(
-          0,
-          -1,
-        ),
+      annotationsRef.current =
+        next
 
-        present: previous,
+      setAnnotations(next)
 
-        future: [
-          current.present,
-          ...current.future,
-        ],
-      }
-    })
+      onChange?.(
+        previous,
+        next,
+      )
+    },
+    [onChange],
+  )
 
-    onChange?.()
-  }, [])
+  /*
+   * ADD HIGHLIGHT / UNDERLINE /
+   * STRIKEOUT
+   */
+  const addAnnotation =
+    useCallback(
+      (
+        page: number,
+        type: AnnotationType,
+        rects: AnnotationRect[],
+      ) => {
+        if (
+          rects.length === 0 ||
+          type === 'note'
+        ) {
+          return
+        }
 
-  const redo = useCallback(() => {
-    setHistory((current) => {
-      if (current.future.length === 0) {
-        return current
-      }
+        const annotation: Annotation = {
+          id: crypto.randomUUID(),
+          page,
+          type,
+          rects,
+        }
 
-      const next =
-        current.future[0]
+        commit([
+          ...annotationsRef.current,
+          annotation,
+        ])
+      },
+      [commit],
+    )
 
-      return {
-        past: [
-          ...current.past,
-          current.present,
-        ],
+  /*
+   * ADD NOTE
+   */
+  const addNote =
+    useCallback(
+      (
+        page: number,
+        x: number,
+        y: number,
+        text: string,
+      ) => {
+        const trimmedText =
+          text.trim()
 
-        present: next,
+        if (!trimmedText) {
+          return
+        }
 
-        future:
-          current.future.slice(1),
-      }
-    })
+        const annotation: Annotation = {
+          id: crypto.randomUUID(),
+          page,
+          type: 'note',
+          rects: [
+            {
+              x,
+              y,
+              width: 24,
+              height: 24,
+            },
+          ],
+          text: trimmedText,
+        }
 
-    onChange?.()
-  }, [])
+        commit([
+          ...annotationsRef.current,
+          annotation,
+        ])
+      },
+      [commit],
+    )
 
-  const canUndo =
-    history.past.length > 0
+  /*
+   * DELETE
+   */
+  const removeAnnotation =
+    useCallback(
+      (id: string) => {
+        const current =
+          annotationsRef.current
 
-  const canRedo =
-    history.future.length > 0
+        const next =
+          current.filter(
+            (annotation) =>
+              annotation.id !== id,
+          )
 
+        if (
+          next.length ===
+          current.length
+        ) {
+          return
+        }
+
+        commit(next)
+      },
+      [commit],
+    )
+
+  /*
+   * LOAD / RESTORE
+   *
+   * Không tạo history.
+   */
+  const replaceAnnotations =
+    useCallback(
+      (
+        nextAnnotations: Annotation[],
+      ) => {
+        annotationsRef.current =
+          nextAnnotations
+
+        setAnnotations(
+          nextAnnotations,
+        )
+      },
+      [],
+    )
+
+  /*
+   * CLEAR
+   */
   const clearAnnotations =
     useCallback(() => {
-      if (annotations.length === 0) {
+      if (
+        annotationsRef.current
+          .length === 0
+      ) {
         return
       }
 
-      updateAnnotations([])
-    }, [
-      annotations,
-      updateAnnotations,
-    ])
+      commit([])
+    }, [commit])
 
   return {
     annotations,
@@ -224,12 +188,8 @@ export default function useAnnotations({
     addAnnotation,
     addNote,
     removeAnnotation,
+
     clearAnnotations,
     replaceAnnotations,
-
-    undo,
-    redo,
-    canUndo,
-    canRedo,
   }
 }

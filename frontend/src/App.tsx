@@ -5,6 +5,8 @@ import {
 import {
   useState,
   useEffect,
+  useCallback,
+  useRef,
 } from 'react'
 
 import PDFViewer from './components/PDFViewer'
@@ -31,6 +33,8 @@ import useBeforeUnload from './hooks/useBeforeUnload'
 import useTextElements
   from './hooks/useTextElements'
 
+import useEditorHistory from './hooks/useEditorHistory'
+
 import type {
   AnnotationType,
 } from './types/annotation'
@@ -53,6 +57,14 @@ export default function App() {
 
   useBeforeUnload(editor.isDirty)
 
+  const history =
+    useEditorHistory()
+
+  const historyActionRef =
+    useRef<'undo' | 'redo' | null>(
+      null,
+    )
+
   const [textMode, setTextMode] =
     useState(false)
 
@@ -62,10 +74,26 @@ export default function App() {
     updateText,
     removeText,
     moveText,
+    beginMoveText,
+    endMoveText,
     replaceTextElements,
-    clearTextElements,
   } = useTextElements({
-    onChange: () => {
+    onChange: (
+      previous,
+      next,
+    ) => {
+      history.record(
+        {
+          annotations: annotationsRef.current,
+          textElements: previous,
+        },
+        {
+          annotations: annotationsRef.current,
+          textElements: next,
+        },
+      )
+      textElementsRef.current = next
+
       editor.setIsDirty(true)
     },
   })
@@ -81,15 +109,42 @@ export default function App() {
     addNote,
     removeAnnotation,
     replaceAnnotations,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
   } = useAnnotations({
-    onChange: () => {
+    onChange: (
+      previous,
+      next,
+    ) => {
+      history.record(
+        {
+          annotations: previous,
+          textElements: textElementsRef.current,
+        },
+        {
+          annotations: next,
+          textElements: textElementsRef.current,
+        },
+      )
+      annotationsRef.current = next
+
       editor.setIsDirty(true)
     },
   })
+
+  const annotationsRef =
+    useRef(annotations)
+
+  const textElementsRef =
+    useRef(textElements)
+
+  useEffect(() => {
+    annotationsRef.current =
+      annotations
+  }, [annotations])
+
+  useEffect(() => {
+    textElementsRef.current =
+      textElements
+  }, [textElements])
 
 
   const [
@@ -205,6 +260,62 @@ export default function App() {
     executePendingAction()
   }
 
+  const handleUndo =
+    useCallback(() => {
+      if (!history.canUndo) {
+        return
+      }
+
+      historyActionRef.current =
+        'undo'
+
+      history.undo()
+
+      editor.setIsDirty(true)
+    }, [
+      history.canUndo,
+      history.undo,
+      editor,
+    ])
+
+  const handleRedo =
+    useCallback(() => {
+      if (!history.canRedo) {
+        return
+      }
+
+      historyActionRef.current =
+        'redo'
+
+      history.redo()
+
+      editor.setIsDirty(true)
+    }, [
+      history.canRedo,
+      history.redo,
+      editor,
+    ])
+
+  const handleLoadAnnotations =
+    useCallback(
+      (next: typeof annotations) => {
+        replaceAnnotations(next)
+
+        annotationsRef.current =
+          next
+
+        history.reset({
+          annotations: next,
+          textElements:
+            textElementsRef.current,
+        })
+      },
+      [
+        replaceAnnotations,
+        history.reset,
+      ],
+    )
+
   const handleSaveAnnotations =
     async () => {
 
@@ -231,8 +342,16 @@ export default function App() {
         editor.replacePdfFile(
           newFile,
         )
-        replaceTextElements([])
+        annotationsRef.current =
+          annotations
 
+        textElementsRef.current =
+          []
+        replaceTextElements([])
+        history.reset({
+          annotations,
+          textElements: [],
+        })
 
         /*
          * Download the generated PDF.
@@ -304,11 +423,8 @@ export default function App() {
     onSave:
       handleSaveAnnotations,
 
-    onUndo:
-      undo,
-
-    onRedo:
-      redo,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
 
     onZoomIn:
       editor.zoomIn,
@@ -373,6 +489,33 @@ export default function App() {
 
   }, [
     closeTopMenu,
+  ])
+
+  useEffect(() => {
+    if (
+      historyActionRef.current ===
+      null
+    ) {
+      return
+    }
+
+    const snapshot =
+      history.history.present
+
+    replaceAnnotations(
+      snapshot.annotations,
+    )
+
+    replaceTextElements(
+      snapshot.textElements,
+    )
+
+    historyActionRef.current =
+      null
+  }, [
+    history.history.present,
+    replaceAnnotations,
+    replaceTextElements,
   ])
 
 
@@ -465,21 +608,20 @@ export default function App() {
            */
 
           onUndo={
-            undo
+            handleUndo
           }
 
           onRedo={
-            redo
+            handleRedo
           }
 
           canUndo={
-            canUndo
+            history.canUndo
           }
 
           canRedo={
-            canRedo
+            history.canRedo
           }
-
 
           /*
            * View
@@ -670,19 +812,19 @@ export default function App() {
          */
 
         onUndo={
-          undo
+          handleUndo
         }
 
         onRedo={
-          redo
+          handleRedo
         }
 
         canUndo={
-          canUndo
+          history.canUndo
         }
 
         canRedo={
-          canRedo
+          history.canRedo
         }
 
       />
@@ -786,6 +928,14 @@ export default function App() {
                   moveText
                 }
 
+                onBeginMoveText={
+                  beginMoveText
+                }
+
+                onEndMoveText={
+                  endMoveText
+                }
+
                 /*
                  * Annotation state
                  */
@@ -811,7 +961,7 @@ export default function App() {
                 }
 
                 onLoadAnnotations={
-                  replaceAnnotations
+                  handleLoadAnnotations
                 }
 
 
