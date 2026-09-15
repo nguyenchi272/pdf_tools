@@ -20,6 +20,7 @@ import type {
 import PDFPage from './pdf/PDFPage'
 import { loadAnnotations } from '../api/pdfApi'
 import type { TextElement } from '../types/text'
+import type { ResizeHandle } from '../hooks/useTextElements'
 
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -69,6 +70,19 @@ interface PDFViewerProps {
 
   onBeginMoveText: () => void
   onEndMoveText: () => void
+  
+  onBeginResizeText: (
+    id: string,
+  ) => void
+
+  onResizeText: (
+    id: string,
+    handle: ResizeHandle,
+    deltaX: number,
+    deltaY: number,
+  ) => void
+
+  onEndResizeText: () => void
 
   onAddAnnotation: (
     page: number,
@@ -118,6 +132,11 @@ export default function PDFViewer({
   onAddAnnotation,
   onAddNote,
   onRemoveAnnotation,
+
+  onBeginResizeText,
+  onResizeText,
+  onEndResizeText,
+
   onLoadAnnotations,
 
   onAddText,
@@ -518,6 +537,12 @@ export default function PDFViewer({
               onBeginMoveText={onBeginMoveText}
 
               onEndMoveText={onEndMoveText}
+
+              onBeginResizeText={onBeginResizeText}
+
+              onResizeText={onResizeText}
+
+              onEndResizeText={onEndResizeText}
 
               onRemoveText={onRemoveText}
 

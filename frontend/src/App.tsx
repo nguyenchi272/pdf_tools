@@ -76,6 +76,9 @@ export default function App() {
     moveText,
     beginMoveText,
     endMoveText,
+    beginResizeText,
+    resizeText,
+    endResizeText,
     replaceTextElements,
   } = useTextElements({
     onChange: (
@@ -935,6 +938,10 @@ export default function App() {
                 onEndMoveText={
                   endMoveText
                 }
+
+                onBeginResizeText={beginResizeText}
+                onResizeText={resizeText}
+                onEndResizeText={endResizeText}
 
                 /*
                  * Annotation state

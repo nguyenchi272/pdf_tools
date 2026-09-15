@@ -6,6 +6,12 @@ import {
 
 import type { TextElement } from '../types/text'
 
+export type ResizeHandle =
+  | 'nw'
+  | 'ne'
+  | 'sw'
+  | 'se'
+
 interface UseTextElementsOptions {
   onChange?: (
     previous: TextElement[],
@@ -21,21 +27,19 @@ export default function useTextElements({
     setTextElements,
   ] = useState<TextElement[]>([])
 
-  /*
-   * Ref luôn chứa state mới nhất.
-   * Dùng ref để tránh stale state trong
-   * drag và Unified History.
-   */
   const elementsRef =
     useRef<TextElement[]>([])
 
-  /*
-   * Snapshot trước khi bắt đầu drag.
-   */
   const dragStartRef =
     useRef<TextElement[] | null>(
       null,
     )
+
+  const resizeStartRef =
+    useRef<{
+      elements: TextElement[]
+      id: string
+    } | null>(null)
 
   const commit = useCallback(
     (next: TextElement[]) => {
@@ -55,9 +59,10 @@ export default function useTextElements({
     [onChange],
   )
 
-  /*
-   * ADD
-   */
+  // --------------------------------------------------
+  // ADD
+  // --------------------------------------------------
+
   const addText = useCallback(
     (
       page: number,
@@ -91,9 +96,10 @@ export default function useTextElements({
     [commit],
   )
 
-  /*
-   * EDIT
-   */
+  // --------------------------------------------------
+  // EDIT TEXT
+  // --------------------------------------------------
+
   const updateText = useCallback(
     (
       id: string,
@@ -134,9 +140,10 @@ export default function useTextElements({
     [commit],
   )
 
-  /*
-   * DELETE
-   */
+  // --------------------------------------------------
+  // DELETE
+  // --------------------------------------------------
+
   const removeText = useCallback(
     (id: string) => {
       const current =
@@ -160,9 +167,10 @@ export default function useTextElements({
     [commit],
   )
 
-  /*
-   * DRAG - BEGIN
-   */
+  // --------------------------------------------------
+  // DRAG
+  // --------------------------------------------------
+
   const beginMoveText =
     useCallback(() => {
       dragStartRef.current =
@@ -173,11 +181,6 @@ export default function useTextElements({
         )
     }, [])
 
-  /*
-   * DRAG - PREVIEW
-   *
-   * Không ghi history ở đây.
-   */
   const moveText = useCallback(
     (
       id: string,
@@ -204,11 +207,6 @@ export default function useTextElements({
     [],
   )
 
-  /*
-   * DRAG - END
-   *
-   * Chỉ ghi đúng 1 history entry.
-   */
   const endMoveText =
     useCallback(() => {
       const previous =
@@ -237,28 +235,217 @@ export default function useTextElements({
       )
     }, [onChange])
 
-  /*
-   * LOAD / RESTORE
-   *
-   * Không tạo history.
-   */
+  // --------------------------------------------------
+  // RESIZE
+  // --------------------------------------------------
+
+  const beginResizeText =
+    useCallback(
+      (id: string) => {
+        resizeStartRef.current = {
+          id,
+          elements:
+            elementsRef.current.map(
+              (element) => ({
+                ...element,
+              }),
+            ),
+        }
+      },
+      [],
+    )
+
+  const resizeText =
+    useCallback(
+      (
+        id: string,
+        handle: ResizeHandle,
+        deltaX: number,
+        deltaY: number,
+      ) => {
+        const start =
+          resizeStartRef.current
+
+        if (!start) {
+          return
+        }
+
+        const element =
+          start.elements.find(
+            (item) =>
+              item.id === id,
+          )
+
+        if (!element) {
+          return
+        }
+
+        const minWidth = 40
+        const minHeight = 20
+
+        let x = element.x
+        let y = element.y
+        let width = element.width
+        let height = element.height
+
+        // ------------------------------------------
+        // EAST
+        // ------------------------------------------
+
+        if (
+          handle === 'ne' ||
+          handle === 'se'
+        ) {
+          width = Math.max(
+            minWidth,
+            element.width + deltaX,
+          )
+        }
+
+        // ------------------------------------------
+        // WEST
+        // ------------------------------------------
+
+        if (
+          handle === 'nw' ||
+          handle === 'sw'
+        ) {
+          const newWidth =
+            Math.max(
+              minWidth,
+              element.width -
+                deltaX,
+            )
+
+          x =
+            element.x +
+            (
+              element.width -
+              newWidth
+            )
+
+          width = newWidth
+        }
+
+        // ------------------------------------------
+        // SOUTH
+        // ------------------------------------------
+
+        if (
+          handle === 'sw' ||
+          handle === 'se'
+        ) {
+          height = Math.max(
+            minHeight,
+            element.height +
+              deltaY,
+          )
+        }
+
+        // ------------------------------------------
+        // NORTH
+        // ------------------------------------------
+
+        if (
+          handle === 'nw' ||
+          handle === 'ne'
+        ) {
+          const newHeight =
+            Math.max(
+              minHeight,
+              element.height -
+                deltaY,
+            )
+
+          y =
+            element.y +
+            (
+              element.height -
+              newHeight
+            )
+
+          height = newHeight
+        }
+
+        const next =
+          start.elements.map(
+            (item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    x,
+                    y,
+                    width,
+                    height,
+                  }
+                : item,
+          )
+
+        elementsRef.current =
+          next
+
+        setTextElements(next)
+      },
+      [],
+    )
+
+  const endResizeText =
+    useCallback(() => {
+      const start =
+        resizeStartRef.current
+
+      const current =
+        elementsRef.current
+
+      resizeStartRef.current =
+        null
+
+      if (!start) {
+        return
+      }
+
+      if (
+        JSON.stringify(
+          start.elements,
+        ) ===
+        JSON.stringify(current)
+      ) {
+        return
+      }
+
+      onChange?.(
+        start.elements,
+        current,
+      )
+    }, [onChange])
+
+  // --------------------------------------------------
+  // REPLACE
+  // --------------------------------------------------
+
   const replaceTextElements =
     useCallback(
       (elements: TextElement[]) => {
         elementsRef.current =
           elements
 
-        setTextElements(elements)
+        setTextElements(
+          elements,
+        )
 
         dragStartRef.current =
+          null
+
+        resizeStartRef.current =
           null
       },
       [],
     )
 
-  /*
-   * CLEAR
-   */
+  // --------------------------------------------------
+  // CLEAR
+  // --------------------------------------------------
+
   const clearTextElements =
     useCallback(() => {
       const current =
@@ -281,6 +468,10 @@ export default function useTextElements({
     beginMoveText,
     moveText,
     endMoveText,
+
+    beginResizeText,
+    resizeText,
+    endResizeText,
 
     replaceTextElements,
     clearTextElements,

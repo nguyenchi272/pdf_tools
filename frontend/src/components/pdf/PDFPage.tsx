@@ -14,6 +14,8 @@ import type {
 
 import type { TextElement } from '../../types/text'
 
+import type { ResizeHandle } from '../../hooks/useTextElements'
+
 import TextEditor from './TextEditor'
 
 import PDFAnnotationLayer from './PDFAnnotationLayer'
@@ -65,6 +67,18 @@ interface PDFPageProps {
 
   onBeginMoveText: () => void
   onEndMoveText: () => void
+  onBeginResizeText: (
+    id: string,
+  ) => void
+
+  onResizeText: (
+    id: string,
+    handle: ResizeHandle,
+    deltaX: number,
+    deltaY: number,
+  ) => void
+
+  onEndResizeText: () => void
 
   onRemoveText: (
     id: string,
@@ -113,6 +127,9 @@ export default function PDFPage({
   onMoveText,
   onBeginMoveText,
   onEndMoveText,
+  onBeginResizeText,
+  onEndResizeText,
+  onResizeText,
   onRemoveText,
 
   onRemoveAnnotation,
@@ -191,6 +208,15 @@ export default function PDFPage({
     startY: number
   } | null>(null)
 
+  const [
+    resizingText,
+    setResizingText,
+    ] = useState<{
+    id: string
+    handle: ResizeHandle
+    startMouseX: number
+    startMouseY: number
+    } | null>(null)
 
   const [
     noteText,
@@ -235,6 +261,13 @@ export default function PDFPage({
         newX,
         newY,
         )
+
+        onResizeText(
+            resizingText.id,
+            resizingText.handle,
+            deltaX,
+            deltaY,
+        )
     }
 
     const handleMouseUp = () => {
@@ -268,6 +301,73 @@ export default function PDFPage({
     zoom,
     onMoveText,
     onEndMoveText,
+    ])
+
+/*
+ * =====================================================
+ * RESIZE TEXT
+ * =====================================================
+ */
+
+    useEffect(() => {
+    if (!resizingText) {
+        return
+    }
+
+    const handleMouseMove = (
+        event: MouseEvent,
+    ) => {
+        const deltaX =
+        (
+            event.clientX -
+            resizingText.startMouseX
+        ) / zoom
+
+        const deltaY =
+        (
+            event.clientY -
+            resizingText.startMouseY
+        ) / zoom
+
+        onResizeText(
+        resizingText.id,
+        resizingText.handle,
+        deltaX,
+        deltaY,
+        )
+    }
+
+    const handleMouseUp = () => {
+        onEndResizeText()
+        setResizingText(null)
+    }
+
+    window.addEventListener(
+        'mousemove',
+        handleMouseMove,
+    )
+
+    window.addEventListener(
+        'mouseup',
+        handleMouseUp,
+    )
+
+    return () => {
+        window.removeEventListener(
+        'mousemove',
+        handleMouseMove,
+        )
+
+        window.removeEventListener(
+        'mouseup',
+        handleMouseUp,
+        )
+    }
+    }, [
+    resizingText,
+    zoom,
+    onResizeText,
+    onEndResizeText,
     ])
 
   /*
@@ -973,6 +1073,36 @@ export default function PDFPage({
     })
   }
 
+    const handleStartResizeText = (
+    event: React.MouseEvent,
+    element: TextElement,
+    handle: ResizeHandle,
+    ) => {
+    if (textEditor) {
+        return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    setSelectedTextId(
+        element.id,
+    )
+
+    onBeginResizeText(
+        element.id,
+    )
+
+    setResizingText({
+        id: element.id,
+        handle,
+        startMouseX:
+        event.clientX,
+        startMouseY:
+        event.clientY,
+    })
+    }
+
 
   /*
    * =====================================================
@@ -1101,6 +1231,8 @@ export default function PDFPage({
             onEditText={handleEditText}
 
             onStartDragText={handleStartDragText}
+
+            onStartResizeText={handleStartResizeText}
 
           />
 
