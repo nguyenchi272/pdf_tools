@@ -12,6 +12,10 @@ import type {
   AnnotationType,
 } from '../../types/annotation'
 
+import type { TextElement } from '../../types/text'
+
+import TextEditor from './TextEditor'
+
 import PDFAnnotationLayer from './PDFAnnotationLayer'
 
 import NoteEditor from './NoteEditor'
@@ -19,6 +23,7 @@ import NoteEditor from './NoteEditor'
 import {
   pointToPDFCoordinates,
 } from '../../utils/pdfCoordinates'
+import PDFTextLayer from './PDFTextLayer'
 
 
 interface PDFPageProps {
@@ -35,6 +40,32 @@ interface PDFPageProps {
   annotationMode:
     | AnnotationType
     | null
+
+  textMode: boolean
+
+  textElements: TextElement[]
+
+  onAddText: (
+    page: number,
+    x: number,
+    y: number,
+    text: string,
+  ) => void
+
+  onUpdateText: (
+    id: string,
+    text: string,
+  ) => void
+
+  onMoveText: (
+    id: string,
+    x: number,
+    y: number,
+  ) => void
+
+  onRemoveText: (
+    id: string,
+  ) => void
 
   onAddAnnotation: (
     page: number,
@@ -68,8 +99,16 @@ export default function PDFPage({
   annotations,
   annotationMode,
 
+  textMode,
+  textElements,
+
   onAddAnnotation,
   onAddNote,
+
+  onAddText,
+  onUpdateText,
+  onMoveText,
+  onRemoveText,
 
   onRemoveAnnotation,
 
@@ -116,12 +155,161 @@ export default function PDFPage({
     screenY: number
   } | null>(null)
 
+  const [
+    textEditor,
+    setTextEditor,
+  ] = useState<{
+    x: number
+    y: number
+    screenX: number
+    screenY: number
+  } | null>(null)
+
+    const [
+    textValue,
+    setTextValue,
+  ] = useState('')
+
+  const [
+    selectedTextId,
+    setSelectedTextId,
+    ] = useState<string | null>(null)
+
+  const [
+    draggingText,
+    setDraggingText,
+  ] = useState<{
+    id: string
+    startMouseX: number
+    startMouseY: number
+    startX: number
+    startY: number
+  } | null>(null)
+
 
   const [
     noteText,
     setNoteText,
   ] = useState('')
 
+
+  /*
+   * =====================================================
+   * move mouse
+   * =====================================================
+   */
+
+  useEffect(() => {
+    if (!draggingText) {
+        return
+    }
+
+    const handleMouseMove = (
+        event: MouseEvent,
+    ) => {
+        const deltaX =
+        (event.clientX -
+            draggingText.startMouseX) /
+        zoom
+
+        const deltaY =
+        (event.clientY -
+            draggingText.startMouseY) /
+        zoom
+
+        const newX =
+        draggingText.startX +
+        deltaX
+
+        const newY =
+        draggingText.startY +
+        deltaY
+
+        onMoveText(
+        draggingText.id,
+        newX,
+        newY,
+        )
+    }
+
+    const handleMouseUp = () => {
+        setDraggingText(null)
+    }
+
+    window.addEventListener(
+        'mousemove',
+        handleMouseMove,
+    )
+
+    window.addEventListener(
+        'mouseup',
+        handleMouseUp,
+    )
+
+    return () => {
+        window.removeEventListener(
+        'mousemove',
+        handleMouseMove,
+        )
+
+        window.removeEventListener(
+        'mouseup',
+        handleMouseUp,
+        )
+    }
+    }, [
+    draggingText,
+    zoom,
+    onMoveText,
+    ])
+
+  /*
+   * =====================================================
+   * Delete by keyboard
+   * =====================================================
+   */
+  useEffect(() => {
+    const handleKeyDown = (
+        event: KeyboardEvent,
+    ) => {
+        if (!selectedTextId) {
+        return
+        }
+
+        if (
+        event.key !== 'Delete' &&
+        event.key !== 'Backspace'
+        ) {
+        return
+        }
+
+        if (textEditor) {
+        return
+        }
+
+        event.preventDefault()
+
+        onRemoveText(selectedTextId)
+
+        setSelectedTextId(null)
+    }
+
+    window.addEventListener(
+        'keydown',
+        handleKeyDown,
+    )
+
+    return () => {
+        window.removeEventListener(
+        'keydown',
+        handleKeyDown,
+        )
+    }
+    }, [
+    selectedTextId,
+    textEditor,
+    onRemoveText,
+    ])
 
   /*
    * =====================================================
@@ -556,50 +744,52 @@ export default function PDFPage({
    */
 
   const handleClick =
-    (
-      event:
-        React.MouseEvent<HTMLDivElement>,
-    ) => {
-      if (
-        annotationMode !==
-        'note'
-      ) {
-        return
-      }
+  (
+    event:
+      React.MouseEvent<HTMLDivElement>,
+  ) => {
+    const target =
+      event.target as HTMLElement
 
-
-      /*
-       * Do not create a new
-       * editor when clicking
-       * inside the editor.
-       */
-
-      const target =
-        event.target as HTMLElement
-
-
-      if (
+    /*
+     * Do not create a new editor
+     * when clicking inside an editor.
+     */
+    if (
         target.closest(
-          '.note-editor',
+        '.pdf-text-element',
         )
-      ) {
+    ) {
         return
-      }
+    }
 
+    if (
+      target.closest(
+        '.note-editor, .text-editor',
+      )
+    ) {
+      return
+    }
 
-      const pageContainer =
-        pageContainerRef.current
+    setSelectedTextId(null)
 
+    const pageContainer =
+      pageContainerRef.current
 
-      if (!pageContainer) {
-        return
-      }
+    if (!pageContainer) {
+      return
+    }
 
+    const pageBounds =
+      pageContainer.getBoundingClientRect()
 
-      const pageBounds =
-        pageContainer.getBoundingClientRect()
+    /*
+     * =================================================
+     * ADD TEXT
+     * =================================================
+     */
 
-
+    if (textMode) {
       const point =
         pointToPDFCoordinates(
           event.clientX,
@@ -608,8 +798,7 @@ export default function PDFPage({
           zoom,
         )
 
-
-      setNoteEditor({
+      setTextEditor({
         x: point.x,
         y: point.y,
 
@@ -620,9 +809,160 @@ export default function PDFPage({
           event.clientY,
       })
 
+      setTextValue('')
 
-      setNoteText('')
+      return
     }
+
+    /*
+     * =================================================
+     * NOTE
+     * =================================================
+     */
+
+    if (
+      annotationMode !== 'note'
+    ) {
+      return
+    }
+
+    const point =
+      pointToPDFCoordinates(
+        event.clientX,
+        event.clientY,
+        pageBounds,
+        zoom,
+      )
+
+    setNoteEditor({
+      x: point.x,
+      y: point.y,
+
+      screenX:
+        event.clientX,
+
+      screenY:
+        event.clientY,
+    })
+
+    setNoteText('')
+  }
+
+    /*
+   * =====================================================
+   * TEXT SAVE
+   * =====================================================
+   */
+
+    const handleSaveText = () => {
+    if (!textEditor) return
+
+    const text = textValue.trim()
+
+    if (text) {
+        if (selectedTextId) {
+        onUpdateText(
+            selectedTextId,
+            text,
+        )
+        } else {
+        onAddText(
+            pageNumber,
+            textEditor.x,
+            textEditor.y,
+            text,
+        )
+        }
+    }
+
+    setTextEditor(null)
+    setTextValue('')
+    setSelectedTextId(null)
+    }
+
+  const handleCancelText = () => {
+    setTextEditor(null)
+    setTextValue('')
+    setSelectedTextId(null)
+  }
+
+  /*
+   * =====================================================
+   * EDIT TEXT
+   * =====================================================
+   */
+  const handleEditText = (
+    element: TextElement,
+    ) => {
+    const pageContainer =
+        pageContainerRef.current
+
+    if (!pageContainer) {
+        return
+    }
+
+    const bounds =
+        pageContainer.getBoundingClientRect()
+
+    setSelectedTextId(
+        element.id,
+    )
+
+    setTextValue(
+        element.text,
+    )
+
+    setTextEditor({
+        x: element.x,
+        y: element.y,
+
+        screenX:
+        bounds.left +
+        element.x * zoom,
+
+        screenY:
+        bounds.top +
+        element.y * zoom,
+    })
+    }
+
+  const handleStartDragText = (
+    event: React.MouseEvent,
+    element: TextElement,
+  ) => {
+    if (textEditor) {
+        return
+    }
+
+    const pageContainer =
+        pageContainerRef.current
+
+    if (!pageContainer) {
+        return
+    }
+
+    event.preventDefault()
+
+    setSelectedTextId(
+        element.id,
+    )
+
+    setDraggingText({
+        id: element.id,
+
+        startMouseX:
+        event.clientX,
+
+        startMouseY:
+        event.clientY,
+
+        startX:
+        element.x,
+
+        startY:
+        element.y,
+    })
+  }
 
 
   /*
@@ -735,6 +1075,26 @@ export default function PDFPage({
           className="textLayer"
         />
 
+        <PDFTextLayer
+            elements={
+                textElements
+            }
+            pageNumber={
+                pageNumber
+            }
+            zoom={
+                zoom
+            }
+            selectedTextId={selectedTextId}
+
+            onSelectText={setSelectedTextId}
+
+            onEditText={handleEditText}
+
+            onStartDragText={handleStartDragText}
+
+          />
+
 
         <PDFAnnotationLayer
           annotations={
@@ -763,6 +1123,17 @@ export default function PDFPage({
         />
       </div>
 
+      {textEditor && (
+        <TextEditor
+            x={textEditor.screenX}
+            y={textEditor.screenY}
+            value={textValue}
+            fontSize={14}
+            onChange={setTextValue}
+            onCancel={handleCancelText}
+            onSave={handleSaveText}
+        />
+        )}
 
       {noteEditor && (
         <NoteEditor

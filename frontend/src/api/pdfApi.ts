@@ -1,4 +1,5 @@
 import type { Annotation } from '../types/annotation'
+import type { TextElement } from '../types/text'
 
 const API_BASE = 'http://localhost:8090'
 
@@ -234,6 +235,7 @@ export async function loadAnnotations(
 export async function saveAnnotations(
   pdfUrl: string,
   annotations: Annotation[],
+  textElements: TextElement[] = [],
 ): Promise<File> {
   const pdfResponse =
     await fetch(pdfUrl)
@@ -261,6 +263,11 @@ export async function saveAnnotations(
     JSON.stringify(
       annotations,
     ),
+  )
+
+  formData.append(
+    'text_elements',
+    JSON.stringify(textElements),
   )
 
   const response =

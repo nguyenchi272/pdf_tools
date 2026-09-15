@@ -296,6 +296,49 @@ def parse_annotations(
 
     return data
 
+def parse_text_elements(
+    text_elements: str,
+) -> list[dict]:
+    """
+    Parse text elements JSON received from the frontend.
+
+    Expected format:
+
+    [
+        {
+            "id": "...",
+            "page": 1,
+            "x": 100,
+            "y": 150,
+            "width": 200,
+            "height": 40,
+            "text": "Hello OpenPDF",
+            "fontSize": 14
+        }
+    ]
+    """
+
+    if not text_elements.strip():
+        return []
+
+    try:
+        data = json.loads(
+            text_elements
+        )
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid text elements JSON: {exc}",
+        )
+
+    if not isinstance(data, list):
+        raise HTTPException(
+            status_code=400,
+            detail="Text elements must be a JSON array.",
+        )
+
+    return data
+
 
 def parse_annotation_rect(
     rect: dict,
@@ -326,6 +369,91 @@ def parse_annotation_rect(
         y + height,
     )
 
+def add_pdf_text(
+    page: pymupdf.Page,
+    text_element: dict,
+) -> None:
+    """
+    Add one frontend text element to a PDF page.
+    """
+
+    try:
+        x = float(
+            text_element["x"]
+        )
+
+        y = float(
+            text_element["y"]
+        )
+
+        width = float(
+            text_element["width"]
+        )
+
+        height = float(
+            text_element["height"]
+        )
+
+        font_size = float(
+            text_element.get(
+                "fontSize",
+                14,
+            )
+        )
+
+        text = str(
+            text_element.get(
+                "text",
+                "",
+            )
+        )
+
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid text element.",
+        )
+
+    if not text.strip():
+        return
+
+    if width <= 0 or height <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Text element width and height "
+                "must be positive."
+            ),
+        )
+
+    if font_size <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Text element font size "
+                "must be positive."
+            ),
+        )
+
+    rect = pymupdf.Rect(
+        x,
+        y,
+        x + width,
+        y + height,
+    )
+
+    page.insert_textbox(
+        rect,
+        text,
+        fontsize=font_size,
+        fontname="helv",
+        color=(0, 0, 0),
+        align=0,
+    )
 
 def add_pdf_annotation(
     page: pymupdf.Page,
@@ -441,6 +569,7 @@ def add_pdf_annotation(
 async def save_annotations(
     file: UploadFile = File(...),
     annotations: str = Form(...),
+    text_elements: str = Form("[]"),
 ):
     contents = await file.read()
 
@@ -468,6 +597,10 @@ async def save_annotations(
             status_code=400,
             detail='Annotations must be a list.',
         )
+    
+    text_data = parse_text_elements(
+        text_elements
+    )
 
     try:
         doc = pymupdf.open(
@@ -612,6 +745,43 @@ async def save_annotations(
             add_pdf_annotation(
                 page,
                 annotation,
+            )
+            
+        # ----------------------------------------------------
+        # Add Text
+        # ----------------------------------------------------
+
+        for text_element in text_data:
+
+            if not isinstance(
+                text_element,
+                dict,
+            ):
+                continue
+
+            page_number = text_element.get(
+                'page'
+            )
+
+            if not isinstance(
+                page_number,
+                int,
+            ):
+                continue
+
+            if (
+                page_number < 1
+                or page_number > doc.page_count
+            ):
+                continue
+
+            page = doc[
+                page_number - 1
+            ]
+
+            add_pdf_text(
+                page,
+                text_element,
             )
 
         output = doc.tobytes(

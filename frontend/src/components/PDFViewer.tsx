@@ -19,6 +19,7 @@ import type {
 
 import PDFPage from './pdf/PDFPage'
 import { loadAnnotations } from '../api/pdfApi'
+import type { TextElement } from '../types/text'
 
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -39,6 +40,32 @@ interface PDFViewerProps {
   annotationMode:
     | AnnotationType
     | null
+
+  textMode: boolean
+
+  textElements: TextElement[]
+
+  onAddText: (
+    page: number,
+    x: number,
+    y: number,
+    text: string,
+  ) => void
+
+  onUpdateText: (
+    id: string,
+    text: string,
+  ) => void
+
+  onRemoveText: (
+    id: string,
+  ) => void
+
+  onMoveText: (
+    id: string,
+    x: number,
+    y: number,
+  ) => void
 
   onAddAnnotation: (
     page: number,
@@ -82,10 +109,18 @@ export default function PDFViewer({
   annotations,
   annotationMode,
 
+  textMode,
+  textElements,
+
   onAddAnnotation,
   onAddNote,
   onRemoveAnnotation,
   onLoadAnnotations,
+
+  onAddText,
+  onUpdateText,
+  onRemoveText,
+  onMoveText,
 
   onNumPages,
   onPageChange,
@@ -464,6 +499,18 @@ export default function PDFViewer({
               annotationMode={
                 annotationMode
               }
+
+              textMode={textMode}
+
+              textElements={textElements}
+
+              onAddText={onAddText}
+
+              onUpdateText={onUpdateText}
+
+              onMoveText={onMoveText}
+
+              onRemoveText={onRemoveText}
 
               onAddAnnotation={
                 onAddAnnotation

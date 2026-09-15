@@ -28,6 +28,9 @@ import useKeyboardShortcuts
 
 import useBeforeUnload from './hooks/useBeforeUnload'
 
+import useTextElements
+  from './hooks/useTextElements'
+
 import type {
   AnnotationType,
 } from './types/annotation'
@@ -49,6 +52,23 @@ export default function App() {
     usePDFEditor()
 
   useBeforeUnload(editor.isDirty)
+
+  const [textMode, setTextMode] =
+    useState(false)
+
+  const {
+    textElements,
+    addText,
+    updateText,
+    removeText,
+    moveText,
+    replaceTextElements,
+    clearTextElements,
+  } = useTextElements({
+    onChange: () => {
+      editor.setIsDirty(true)
+    },
+  })
   /*
    * =====================================================
    * ANNOTATIONS
@@ -200,6 +220,7 @@ export default function App() {
           await saveAnnotations(
             editor.pdfUrl,
             annotations,
+            textElements,
           )
 
 
@@ -210,6 +231,7 @@ export default function App() {
         editor.replacePdfFile(
           newFile,
         )
+        replaceTextElements([])
 
 
         /*
@@ -621,6 +643,14 @@ export default function App() {
           editor.nextPage
         }
 
+        //text mode
+        textMode={
+          textMode
+        }
+
+        onTextModeChange={
+          setTextMode
+        }
 
         /*
          * Annotation
@@ -732,6 +762,29 @@ export default function App() {
                   editor.currentPage
                 }
 
+                textMode={
+                  textMode
+                }
+
+                textElements={
+                  textElements
+                }
+
+                onAddText={
+                  addText
+                }
+
+                onUpdateText={
+                  updateText
+                }
+
+                onRemoveText={
+                  removeText
+                }
+
+                onMoveText={
+                  moveText
+                }
 
                 /*
                  * Annotation state

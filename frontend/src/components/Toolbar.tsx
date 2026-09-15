@@ -12,6 +12,7 @@ import {
   Underline,
   Strikethrough,
   StickyNote,
+  Type,
   ZoomIn,
   ZoomOut,
   Maximize,
@@ -45,6 +46,8 @@ interface ToolbarProps {
     | AnnotationType
     | null
 
+  textMode: boolean
+
   canUndo: boolean
   canRedo: boolean
 
@@ -68,6 +71,9 @@ interface ToolbarProps {
   onAnnotationModeChange:
     (mode: AnnotationType | null) => void
 
+  onTextModeChange:
+    (enabled: boolean) => void
+
   onUndo: () => void
   onRedo: () => void
 }
@@ -85,6 +91,7 @@ export default function Toolbar({
   zoom,
 
   annotationMode,
+  textMode,
 
   canUndo,
   canRedo,
@@ -107,6 +114,7 @@ export default function Toolbar({
   onNextPage,
 
   onAnnotationModeChange,
+  onTextModeChange,
 
   onUndo,
   onRedo,
@@ -213,12 +221,27 @@ export default function Toolbar({
   const selectAnnotationMode = (
     mode: AnnotationType,
   ) => {
+    onTextModeChange(false)
 
     onAnnotationModeChange(
       annotationMode === mode
         ? null
         : mode,
     )
+
+    setOpenMenu(null)
+
+  }
+
+  const selectTextMode = () => {
+
+    const nextMode = !textMode
+
+    onTextModeChange(nextMode)
+
+    if (nextMode) {
+        onAnnotationModeChange(null)
+    }
 
     setOpenMenu(null)
 
@@ -430,7 +453,8 @@ export default function Toolbar({
           type="button"
           className={
             openMenu === 'annotate' ||
-            annotationMode
+            annotationMode ||
+            textMode
               ? 'toolbar-button menu-button active'
               : 'toolbar-button menu-button'
           }
@@ -447,14 +471,16 @@ export default function Toolbar({
         >
           <Highlighter size={17} />
           <span>
-            {annotationMode
-              ? annotationMode === 'highlight'
-                ? 'Highlight'
-                : annotationMode === 'underline'
-                  ? 'Underline'
-                  : annotationMode === 'strikeout'
-                    ? 'Strikeout'
-                    : 'Note'
+            {textMode
+              ? 'Add Text'
+              :annotationMode
+                ? annotationMode === 'highlight'
+                  ? 'Highlight'
+                  : annotationMode === 'underline'
+                    ? 'Underline'
+                    : annotationMode === 'strikeout'
+                      ? 'Strikeout'
+                      : 'Note'
               : 'Annotate'}
           </span>
           <ChevronDown size={15} />
@@ -569,6 +595,33 @@ export default function Toolbar({
                   ✓
                 </span>
               )}
+
+            </button>
+
+            <div className="toolbar-menu-separator" />
+
+            <button
+            type="button"
+            className={
+                textMode
+                ? 'selected'
+                : ''
+            }
+            onClick={
+                selectTextMode
+            }
+            disabled={
+                processing
+            }
+            >
+            <Type size={16} />
+            <span>Add Text</span>
+
+            {textMode && (
+                <span className="menu-check">
+                ✓
+                </span>
+            )}
 
             </button>
 

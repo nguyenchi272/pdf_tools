@@ -1426,3 +1426,41 @@ body {
 .unsaved-dialog-actions button.primary:hover:not(:disabled) {
   background: #1d4ed8;
 }
+
+.text-editor {
+  z-index: 1000;
+
+  width: 220px;
+  min-height: 40px;
+
+  padding: 6px 8px;
+
+  border: 1px solid #2563eb;
+  border-radius: 4px;
+
+  background: #fff;
+
+  outline: none;
+
+  resize: both;
+}
+
+.pdf-text-element {
+  z-index: 20;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #000;
+  cursor: grab;
+  padding: 2px;
+  box-sizing: border-box;
+}
+
+.pdf-text-element.selected {
+  outline: 1px solid #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  cursor: grab;
+}
+
+.pdf-text-element:active {
+  cursor: grabbing;
+}
