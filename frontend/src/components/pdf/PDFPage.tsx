@@ -47,6 +47,13 @@ interface PDFPageProps {
 
   textElements: TextElement[]
 
+  selectedTextId:
+    string | null
+
+  onSelectText: (
+    id: string | null,
+  ) => void
+
   onAddText: (
     page: number,
     x: number,
@@ -58,6 +65,11 @@ interface PDFPageProps {
     id: string,
     text: string,
   ) => void
+
+  onUpdateTextFontSize: (
+    id: string,
+    fontSize: number,
+    ) => void
 
   onMoveText: (
     id: string,
@@ -118,12 +130,15 @@ export default function PDFPage({
 
   textMode,
   textElements,
+  selectedTextId,
 
+  onSelectText,
   onAddAnnotation,
   onAddNote,
 
   onAddText,
   onUpdateText,
+  onUpdateTextFontSize,
   onMoveText,
   onBeginMoveText,
   onEndMoveText,
@@ -193,11 +208,6 @@ export default function PDFPage({
   ] = useState('')
 
   const [
-    selectedTextId,
-    setSelectedTextId,
-    ] = useState<string | null>(null)
-
-  const [
     draggingText,
     setDraggingText,
   ] = useState<{
@@ -262,12 +272,12 @@ export default function PDFPage({
         newY,
         )
 
-        onResizeText(
-            resizingText.id,
-            resizingText.handle,
-            deltaX,
-            deltaY,
-        )
+        // onResizeText(
+        //     resizingText.id,
+        //     resizingText.handle,
+        //     deltaX,
+        //     deltaY,
+        // )
     }
 
     const handleMouseUp = () => {
@@ -398,7 +408,7 @@ export default function PDFPage({
 
         onRemoveText(selectedTextId)
 
-        setSelectedTextId(null)
+        onSelectText(null)
     }
 
     window.addEventListener(
@@ -878,7 +888,7 @@ export default function PDFPage({
       return
     }
 
-    setSelectedTextId(null)
+    onSelectText(null)
 
     const pageContainer =
       pageContainerRef.current
@@ -984,13 +994,13 @@ export default function PDFPage({
 
     setTextEditor(null)
     setTextValue('')
-    setSelectedTextId(null)
+    onSelectText(null)
     }
 
   const handleCancelText = () => {
     setTextEditor(null)
     setTextValue('')
-    setSelectedTextId(null)
+    onSelectText(null)
   }
 
   /*
@@ -1011,7 +1021,7 @@ export default function PDFPage({
     const bounds =
         pageContainer.getBoundingClientRect()
 
-    setSelectedTextId(
+    onSelectText(
         element.id,
     )
 
@@ -1050,7 +1060,7 @@ export default function PDFPage({
 
     event.preventDefault()
 
-    setSelectedTextId(
+    onSelectText(
         element.id,
     )
 
@@ -1085,7 +1095,7 @@ export default function PDFPage({
     event.preventDefault()
     event.stopPropagation()
 
-    setSelectedTextId(
+    onSelectText(
         element.id,
     )
 
@@ -1152,6 +1162,13 @@ export default function PDFPage({
       setNoteEditor(null)
       setNoteText('')
     }
+
+  const selectedTextElement =
+    textElements.find(
+        (element) =>
+        element.id ===
+        selectedTextId,
+    )
 
 
   /*
@@ -1226,7 +1243,7 @@ export default function PDFPage({
             }
             selectedTextId={selectedTextId}
 
-            onSelectText={setSelectedTextId}
+            onSelectText={onSelectText}
 
             onEditText={handleEditText}
 

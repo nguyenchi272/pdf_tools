@@ -42,6 +42,7 @@ import type {
 import {
   saveAnnotations,
 } from './api/pdfApi'
+import TextToolbar from './components/TextToolbar'
 
 
 export default function App() {
@@ -68,10 +69,16 @@ export default function App() {
   const [textMode, setTextMode] =
     useState(false)
 
+  const [
+    selectedTextId,
+    setSelectedTextId,
+  ] = useState<string | null>(null)
+
   const {
     textElements,
     addText,
     updateText,
+    updateTextFontSize,
     removeText,
     moveText,
     beginMoveText,
@@ -100,6 +107,13 @@ export default function App() {
       editor.setIsDirty(true)
     },
   })
+
+  const selectedTextElement =
+    textElements.find(
+      (element) =>
+        element.id ===
+        selectedTextId,
+    ) ?? null
   /*
    * =====================================================
    * ANNOTATIONS
@@ -298,6 +312,12 @@ export default function App() {
       history.redo,
       editor,
     ])
+  
+  const handleSelectTool = useCallback(() => {
+    setSelectedTextId(null)
+    setAnnotationMode(null)
+    setTextMode(false)
+  }, [])
 
   const handleLoadAnnotations =
     useCallback(
@@ -830,6 +850,16 @@ export default function App() {
           history.canRedo
         }
 
+        selectedTextElement={
+          selectedTextElement
+        }
+
+        onUpdateTextFontSize={
+          updateTextFontSize
+        }
+
+        onSelectTool={handleSelectTool}
+
       />
 
 
@@ -915,12 +945,24 @@ export default function App() {
                   textElements
                 }
 
+                selectedTextId={
+                  selectedTextId
+                }
+
+                onSelectText={
+                  setSelectedTextId
+                }
+
                 onAddText={
                   addText
                 }
 
                 onUpdateText={
                   updateText
+                }
+
+                onUpdateTextFontSize={
+                  updateTextFontSize
                 }
 
                 onRemoveText={

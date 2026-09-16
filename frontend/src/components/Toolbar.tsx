@@ -18,6 +18,7 @@ import {
   Maximize,
   ChevronLeft,
   ChevronRight,
+  MousePointer2,
 } from 'lucide-react'
 
 import {
@@ -25,6 +26,9 @@ import {
   useRef,
   useState,
 } from 'react'
+
+import type { TextElement } from '../types/text'
+import TextToolbar from './TextToolbar'
 
 import type {
   AnnotationType,
@@ -51,6 +55,14 @@ interface ToolbarProps {
   canUndo: boolean
   canRedo: boolean
 
+  selectedTextElement:
+  TextElement | null
+
+  onUpdateTextFontSize: (
+    id: string,
+    fontSize: number,
+  ) => void
+
   onOpen: () => void
   onSave: () => void
 
@@ -76,6 +88,7 @@ interface ToolbarProps {
 
   onUndo: () => void
   onRedo: () => void
+  onSelectTool: () => void
 }
 
 
@@ -95,7 +108,9 @@ export default function Toolbar({
 
   canUndo,
   canRedo,
+  selectedTextElement,
 
+  onUpdateTextFontSize,
   onOpen,
   onSave,
 
@@ -118,6 +133,7 @@ export default function Toolbar({
 
   onUndo,
   onRedo,
+  onSelectTool,
 }: ToolbarProps) {
 
   const [
@@ -342,6 +358,16 @@ export default function Toolbar({
 
 
       <div className="toolbar-separator" />
+
+      <button
+        type="button"
+        className="toolbar-button"
+        title="Select"
+        onClick={onSelectTool}
+        disabled={!hasPDF || processing}
+        >
+        <MousePointer2 size={18} />
+      </button>
 
 
       {/* =================================================
@@ -634,6 +660,21 @@ export default function Toolbar({
 
       <div className="toolbar-separator" />
 
+      {selectedTextElement && (
+        <TextToolbar
+            fontSize={
+            selectedTextElement.fontSize
+            }
+            onChangeFontSize={(
+            fontSize,
+            ) => {
+            onUpdateTextFontSize(
+                selectedTextElement.id,
+                fontSize,
+            )
+            }}
+        />
+      )}
 
       {/* =================================================
           VIEW CONTROLS

@@ -46,6 +46,13 @@ interface PDFViewerProps {
 
   textElements: TextElement[]
 
+  selectedTextId:
+    string | null
+
+  onSelectText: (
+    id: string | null,
+  ) => void
+
   onAddText: (
     page: number,
     x: number,
@@ -56,6 +63,11 @@ interface PDFViewerProps {
   onUpdateText: (
     id: string,
     text: string,
+  ) => void
+
+  onUpdateTextFontSize: (
+    id: string,
+    fontSize: number,
   ) => void
 
   onRemoveText: (
@@ -128,6 +140,8 @@ export default function PDFViewer({
 
   textMode,
   textElements,
+  selectedTextId,
+  onSelectText,
 
   onAddAnnotation,
   onAddNote,
@@ -141,6 +155,7 @@ export default function PDFViewer({
 
   onAddText,
   onUpdateText,
+  onUpdateTextFontSize,
   onRemoveText,
   onMoveText,
   onBeginMoveText,
@@ -528,9 +543,19 @@ export default function PDFViewer({
 
               textElements={textElements}
 
+              selectedTextId={
+                selectedTextId
+              }
+
+              onSelectText={
+                onSelectText
+              }
+
               onAddText={onAddText}
 
               onUpdateText={onUpdateText}
+
+              onUpdateTextFontSize={onUpdateTextFontSize}
 
               onMoveText={onMoveText}
 

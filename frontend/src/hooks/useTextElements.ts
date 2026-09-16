@@ -140,6 +140,55 @@ export default function useTextElements({
     [commit],
   )
 
+  //FONT SIZE
+  const updateTextFontSize =
+  useCallback(
+    (
+      id: string,
+      fontSize: number,
+    ) => {
+      const current =
+        elementsRef.current
+
+      const element =
+        current.find(
+          (item) =>
+            item.id === id,
+        )
+
+      if (!element) {
+        return
+      }
+
+      const nextFontSize =
+        Math.max(
+          6,
+          Math.min(200, fontSize),
+        )
+
+      if (
+        element.fontSize ===
+        nextFontSize
+      ) {
+        return
+      }
+
+      const next =
+        current.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                fontSize:
+                  nextFontSize,
+              }
+            : item,
+        )
+
+      commit(next)
+    },
+    [commit],
+  )
+
   // --------------------------------------------------
   // DELETE
   // --------------------------------------------------
@@ -463,6 +512,7 @@ export default function useTextElements({
 
     addText,
     updateText,
+    updateTextFontSize,
     removeText,
 
     beginMoveText,

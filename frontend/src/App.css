@@ -1498,3 +1498,41 @@ body {
   bottom: -5px;
   cursor: nwse-resize;
 }
+
+.text-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.text-toolbar button {
+  width: 28px;
+  height: 28px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 4px;
+
+  cursor: pointer;
+}
+
+.text-toolbar button:hover {
+  background: #f3f4f6;
+}
+
+.text-toolbar input {
+  width: 52px;
+  height: 28px;
+
+  box-sizing: border-box;
+
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+
+  text-align: center;
+  font-size: 13px;
+}
