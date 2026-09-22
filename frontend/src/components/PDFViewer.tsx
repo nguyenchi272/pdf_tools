@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -21,7 +22,9 @@ import PDFPage from './pdf/PDFPage'
 import { loadAnnotations } from '../api/pdfApi'
 import type { TextElement } from '../types/text'
 import type { ResizeHandle } from '../hooks/useTextElements'
+import PDFSearch from './PDFSearch'
 
+import usePDFSearch from '../hooks/usePDFSearch'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   pdfWorker
@@ -132,6 +135,272 @@ interface PDFViewerProps {
   ) => void
 }
 
+/*
+ * =====================================================
+ * SEARCH TEXT LAYER
+ * =====================================================
+ *
+ * Finds the Nth occurrence of the query inside the
+ * native PDF.js text layer and returns its DOM rects.
+ *
+ * We use DOM Range instead of PDF coordinates so the
+ * highlight automatically follows zoom and rotation.
+ */
+
+function findSearchMatchInTextLayer(
+  textLayer: HTMLElement,
+  query: string,
+  occurrenceIndex: number,
+): Range | null {
+
+  const normalizedQuery =
+    query
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLocaleLowerCase()
+
+
+  if (!normalizedQuery) {
+    return null
+  }
+
+
+  const walker =
+    document.createTreeWalker(
+      textLayer,
+      NodeFilter.SHOW_TEXT,
+    )
+
+
+  const textNodes: Text[] = []
+
+  let node =
+    walker.nextNode()
+
+
+  while (node) {
+
+    if (
+      node instanceof Text &&
+      node.textContent
+    ) {
+      textNodes.push(node)
+    }
+
+    node =
+      walker.nextNode()
+  }
+
+
+  if (
+    textNodes.length === 0
+  ) {
+    return null
+  }
+
+
+  /*
+   * Build a normalized text string while keeping
+   * references to the original DOM text nodes.
+   */
+
+  let combinedText = ''
+
+  const positions:
+    Array<{
+      node: Text
+      offset: number
+    }> = []
+
+
+  for (
+    const textNode
+    of textNodes
+  ) {
+
+    const value =
+      textNode.textContent ?? ''
+
+
+    for (
+      let index = 0;
+      index < value.length;
+      index++
+    ) {
+
+      combinedText +=
+        value[index]
+
+      positions.push({
+        node: textNode,
+        offset: index,
+      })
+    }
+  }
+
+
+  const normalizedText =
+    combinedText
+      .replace(/\s+/g, ' ')
+      .toLocaleLowerCase()
+
+
+  /*
+   * Find requested occurrence.
+   */
+
+  let searchStart = 0
+  let foundCount = 0
+
+
+  while (true) {
+
+    const matchIndex =
+      normalizedText.indexOf(
+        normalizedQuery,
+        searchStart,
+      )
+
+
+    if (
+      matchIndex === -1
+    ) {
+      return null
+    }
+
+
+    if (
+      foundCount ===
+      occurrenceIndex
+    ) {
+
+      /*
+       * Because whitespace may have been collapsed,
+       * map the normalized indexes back to the original
+       * DOM text indexes.
+       */
+
+      const originalIndexes:
+        number[] = []
+
+      let previousWasWhitespace =
+        false
+
+
+      for (
+        let index = 0;
+        index < combinedText.length;
+        index++
+      ) {
+
+        const character =
+          combinedText[index]
+
+        const isWhitespace =
+          /\s/.test(
+            character,
+          )
+
+
+        if (
+          isWhitespace
+        ) {
+
+          if (
+            previousWasWhitespace
+          ) {
+            continue
+          }
+
+          previousWasWhitespace =
+            true
+
+        } else {
+
+          previousWasWhitespace =
+            false
+        }
+
+
+        originalIndexes.push(
+          index,
+        )
+      }
+
+
+      const originalStart =
+        originalIndexes[
+          matchIndex
+        ]
+
+
+      const originalEnd =
+        originalIndexes[
+          matchIndex +
+            normalizedQuery.length -
+            1
+        ]
+
+
+      if (
+        originalStart === undefined ||
+        originalEnd === undefined
+      ) {
+        return null
+      }
+
+
+      const startPosition =
+        positions[
+          originalStart
+        ]
+
+
+      const endPosition =
+        positions[
+          originalEnd
+        ]
+
+
+      if (
+        !startPosition ||
+        !endPosition
+      ) {
+        return null
+      }
+
+
+      const range =
+        document.createRange()
+
+
+      range.setStart(
+        startPosition.node,
+        startPosition.offset,
+      )
+
+
+      range.setEnd(
+        endPosition.node,
+        endPosition.offset + 1,
+      )
+
+
+      return range
+    }
+
+
+    foundCount++
+
+
+    searchStart =
+      matchIndex +
+      Math.max(
+        normalizedQuery.length,
+        1,
+      )
+  }
+}
 
 export default function PDFViewer({
   pdfUrl,
@@ -176,6 +445,10 @@ export default function PDFViewer({
       null,
     )
 
+  const searchHighlightRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    )
 
   const pageRefs =
     useRef<
@@ -194,6 +467,426 @@ export default function PDFViewer({
       pdfjsLib.PDFDocumentProxy | null
     >(null)
 
+  /*
+  * =====================================================
+  * PDF SEARCH
+  * =====================================================
+  */
+
+  const [
+    searchOpen,
+    setSearchOpen,
+  ] = useState(false)
+
+  const [
+    searchQuery,
+    setSearchQuery,
+  ] = useState('')
+
+  const [
+    currentMatchIndex,
+    setCurrentMatchIndex,
+  ] = useState(0)
+
+
+  const {
+    search,
+    clearSearch,
+    matches,
+    isSearching,
+  } =
+    usePDFSearch(pdf)
+
+  /*
+  * =====================================================
+  * SEARCH QUERY
+  * =====================================================
+  */
+
+  const handleSearchQueryChange =
+    useCallback(
+      (
+        query: string,
+      ) => {
+
+        setSearchQuery(
+          query,
+        )
+
+        setCurrentMatchIndex(
+          0,
+        )
+
+        if (!query.trim()) {
+
+          clearSearch()
+
+        }
+
+      },
+      [
+        clearSearch,
+      ],
+    )
+
+  const handleSearch =
+    useCallback(
+      async (
+        query: string,
+      ) => {
+
+        setSearchQuery(
+          query,
+        )
+
+        setCurrentMatchIndex(
+          0,
+        )
+
+        await search(
+          query,
+        )
+
+      },
+      [
+        search,
+      ],
+    )
+  /*
+  * =====================================================
+  * SEARCH NAVIGATION
+  * =====================================================
+  */
+
+  const handlePreviousMatch =
+    useCallback(() => {
+
+      if (
+        matches.length === 0
+      ) {
+        return
+      }
+
+      setCurrentMatchIndex(
+        (current) =>
+          current <= 0
+            ? matches.length - 1
+            : current - 1,
+      )
+
+    }, [
+      matches.length,
+    ])
+
+
+  const handleNextMatch =
+    useCallback(() => {
+
+      if (
+        matches.length === 0
+      ) {
+        return
+      }
+
+      setCurrentMatchIndex(
+        (current) =>
+          current >= matches.length - 1
+            ? 0
+            : current + 1,
+      )
+
+    }, [
+      matches.length,
+    ])
+
+  /*
+  * =====================================================
+  * HIGHLIGHT CURRENT SEARCH MATCH
+  * =====================================================
+  */
+
+  useEffect(() => {
+
+    /*
+    * Remove previous highlight.
+    */
+
+    const previous =
+      searchHighlightRef.current
+
+
+    if (previous) {
+
+      previous.remove()
+
+      searchHighlightRef.current =
+        null
+    }
+
+
+    /*
+    * Nothing to highlight.
+    */
+
+    if (
+      !searchOpen ||
+      !searchQuery.trim() ||
+      matches.length === 0
+    ) {
+      return
+    }
+
+
+    const match =
+      matches[
+        currentMatchIndex
+      ]
+
+
+    if (!match) {
+      return
+    }
+
+
+    const page =
+      pageRefs.current.get(
+        match.pageNumber,
+      )
+
+
+    if (!page) {
+      return
+    }
+
+
+    /*
+    * The page may still be rendering its PDF.js
+    * text layer.
+    */
+    const highlightMatch =
+      () => {
+
+        const textLayer =
+          page.querySelector(
+            '.textLayer',
+          ) as HTMLElement | null
+
+
+        if (!textLayer) {
+          return false
+        }
+
+
+        /*
+        * Search occurrence index inside this page.
+        *
+        * PDFSearch returns matches in document order,
+        * therefore only matches from the same page that
+        * appear before the current match are counted.
+        */
+
+        const pageOccurrenceIndex =
+          matches
+            .slice(
+              0,
+              currentMatchIndex,
+            )
+            .filter(
+              (item) =>
+                item.pageNumber ===
+                match.pageNumber,
+            )
+            .length
+
+
+        const range =
+          findSearchMatchInTextLayer(
+            textLayer,
+            searchQuery,
+            pageOccurrenceIndex,
+          )
+
+
+        if (!range) {
+          return false
+        }
+
+
+        const pageContainer =
+          page.querySelector(
+            '.pdf-page-container',
+          ) as HTMLElement | null
+
+
+        if (!pageContainer) {
+          return false
+        }
+
+
+        /*
+        * Create temporary search highlight.
+        *
+        * This is UI-only and is NOT saved into PDF.
+        */
+
+        const highlight =
+          document.createElement(
+            'div',
+          )
+
+
+        highlight.className =
+          'pdf-search-highlight'
+
+
+        const pageBounds =
+          pageContainer.getBoundingClientRect()
+
+
+        const rects =
+          Array.from(
+            range.getClientRects(),
+          )
+
+
+        for (
+          const rect
+          of rects
+        ) {
+
+          const item =
+            document.createElement(
+              'div',
+            )
+
+
+          item.className =
+            'pdf-search-highlight-rect'
+
+
+          item.style.left =
+            `${rect.left - pageBounds.left}px`
+
+
+          item.style.top =
+            `${rect.top - pageBounds.top}px`
+
+
+          item.style.width =
+            `${rect.width}px`
+
+
+          item.style.height =
+            `${rect.height}px`
+
+
+          highlight.appendChild(
+            item,
+          )
+        }
+
+
+        pageContainer.appendChild(
+          highlight,
+        )
+
+
+        searchHighlightRef.current =
+          highlight
+
+
+        /*
+        * Scroll the matched page into view.
+        */
+
+        page.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        })
+
+
+        /*
+        * Remove native browser selection.
+        */
+
+        window
+          .getSelection()
+          ?.removeAllRanges()
+
+
+        return true
+      }
+
+
+    /*
+    * Try immediately.
+    */
+
+    if (
+      highlightMatch()
+    ) {
+      return
+    }
+
+
+    /*
+    * PDF.js may still be rendering the text layer.
+    * Retry once shortly afterwards.
+    */
+
+    const timer =
+      window.setTimeout(
+        () => {
+
+          highlightMatch()
+
+        },
+        150,
+      )
+
+
+    return () => {
+
+      window.clearTimeout(
+        timer,
+      )
+
+    }
+
+  }, [
+    searchOpen,
+    searchQuery,
+    matches,
+    currentMatchIndex,
+  ])
+
+
+  /*
+  * =====================================================
+  * CLOSE SEARCH
+  * =====================================================
+  */
+
+  const handleCloseSearch =
+    useCallback(() => {
+
+      setSearchOpen(
+        false,
+      )
+
+      setSearchQuery(
+        '',
+      )
+
+      setCurrentMatchIndex(
+        0,
+      )
+
+      clearSearch()
+
+    }, [
+      clearSearch,
+    ])
 
   /*
    * =====================================================
@@ -323,6 +1016,100 @@ export default function PDFViewer({
     onLoadAnnotations,
   ])
 
+  /*
+  * =====================================================
+  * SEARCH KEYBOARD SHORTCUT
+  * =====================================================
+  */
+
+  useEffect(() => {
+
+    const handleKeyDown =
+      (
+        event: KeyboardEvent,
+      ) => {
+
+        const target =
+          event.target as HTMLElement | null
+
+
+        const isEditing =
+          target?.tagName === 'INPUT' ||
+          target?.tagName === 'TEXTAREA' ||
+          target?.isContentEditable
+
+
+        /*
+        * Ctrl + F / Cmd + F
+        */
+
+        if (
+          (event.ctrlKey || event.metaKey) &&
+          event.key.toLowerCase() === 'f'
+        ) {
+
+          event.preventDefault()
+
+          setSearchOpen(
+            true,
+          )
+
+          return
+        }
+
+
+        /*
+        * Escape closes search.
+        */
+
+        if (
+          event.key === 'Escape' &&
+          searchOpen &&
+          !isEditing
+        ) {
+
+          event.preventDefault()
+
+          handleCloseSearch()
+
+        }
+
+      }
+
+
+    document.addEventListener(
+      'keydown',
+      handleKeyDown,
+    )
+
+
+    return () => {
+
+      document.removeEventListener(
+        'keydown',
+        handleKeyDown,
+      )
+
+    }
+
+  }, [
+    searchOpen,
+    handleCloseSearch,
+  ])
+
+  useEffect(() => {
+
+    if (!searchOpen) {
+      return
+    }
+
+    setCurrentMatchIndex(
+      0,
+    )
+
+  }, [
+    searchOpen,
+  ])
 
   /*
    * =====================================================
@@ -502,103 +1289,178 @@ export default function PDFViewer({
 
   return (
     <div
-      ref={containerRef}
-      className="pdf-viewer"
+      className="pdf-viewer-container"
     >
-      {Array.from(
-        {
-          length:
-            pdf.numPages,
-        },
 
-        (_, index) => {
-          const pageNumber =
-            index + 1
+      {searchOpen && (
+        <PDFSearch
+          query={
+            searchQuery
+          }
 
+          matches={
+            matches
+          }
 
-          return (
-            <PDFPage
-              key={
-                pageNumber
-              }
+          currentMatchIndex={
+            currentMatchIndex
+          }
 
-              pdf={
-                pdf
-              }
+          isSearching={
+            isSearching
+          }
 
-              pageNumber={
-                pageNumber
-              }
+          onQueryChange={
+            handleSearchQueryChange
+          }
 
-              zoom={
-                zoom
-              }
+          onPrevious={
+            handlePreviousMatch
+          }
 
-              rotation={
-                rotation
-              }
+          onNext={
+            handleNextMatch
+          }
 
-              annotations={
-                annotations
-              }
+          onClose={
+            handleCloseSearch
+          }
 
-              annotationMode={
-                annotationMode
-              }
-
-              textMode={textMode}
-
-              textElements={textElements}
-
-              selectedTextId={
-                selectedTextId
-              }
-
-              onSelectText={
-                onSelectText
-              }
-
-              onAddText={onAddText}
-
-              onUpdateText={onUpdateText}
-
-              onUpdateTextFontSize={onUpdateTextFontSize}
-
-              onMoveText={onMoveText}
-
-              onBeginMoveText={onBeginMoveText}
-
-              onEndMoveText={onEndMoveText}
-
-              onBeginResizeText={onBeginResizeText}
-
-              onResizeText={onResizeText}
-
-              onEndResizeText={onEndResizeText}
-
-              onRemoveText={onRemoveText}
-
-              onAddAnnotation={
-                onAddAnnotation
-              }
-
-              onAddNote={
-                onAddNote
-              }
-
-              onRemoveAnnotation={
-                onRemoveAnnotation
-              }
-
-              onPageRef={
-                registerPageRef
-              }
-
-              onSetPastePosition={onSetPastePosition}
-            />
-          )
-        },
+          onSearch={
+            handleSearch
+          }
+        />
       )}
+
+
+      <div
+        ref={containerRef}
+        className="pdf-viewer"
+      >
+
+        {Array.from(
+          {
+            length:
+              pdf.numPages,
+          },
+
+          (_, index) => {
+
+            const pageNumber =
+              index + 1
+
+            return (
+              <PDFPage
+                key={
+                  pageNumber
+                }
+
+                pdf={
+                  pdf
+                }
+
+                pageNumber={
+                  pageNumber
+                }
+
+                zoom={
+                  zoom
+                }
+
+                rotation={
+                  rotation
+                }
+
+                annotations={
+                  annotations
+                }
+
+                annotationMode={
+                  annotationMode
+                }
+
+                textMode={
+                  textMode
+                }
+
+                textElements={
+                  textElements
+                }
+
+                selectedTextId={
+                  selectedTextId
+                }
+
+                onSelectText={
+                  onSelectText
+                }
+
+                onAddAnnotation={
+                  onAddAnnotation
+                }
+
+                onAddNote={
+                  onAddNote
+                }
+
+                onRemoveAnnotation={
+                  onRemoveAnnotation
+                }
+
+                onAddText={
+                  onAddText
+                }
+
+                onUpdateText={
+                  onUpdateText
+                }
+
+                onUpdateTextFontSize={
+                  onUpdateTextFontSize
+                }
+
+                onRemoveText={
+                  onRemoveText
+                }
+
+                onMoveText={
+                  onMoveText
+                }
+
+                onBeginMoveText={
+                  onBeginMoveText
+                }
+
+                onEndMoveText={
+                  onEndMoveText
+                }
+
+                onBeginResizeText={
+                  onBeginResizeText
+                }
+
+                onResizeText={
+                  onResizeText
+                }
+
+                onEndResizeText={
+                  onEndResizeText
+                }
+
+                onPageRef={
+                  registerPageRef
+                }
+
+                onSetPastePosition={
+                  onSetPastePosition
+                }
+              />
+            )
+          },
+        )}
+
+      </div>
+
     </div>
   )
 }
