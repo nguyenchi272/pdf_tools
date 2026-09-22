@@ -373,46 +373,17 @@ def add_pdf_text(
     page: pymupdf.Page,
     text_element: dict,
 ) -> None:
-    """
-    Add one frontend text element to a PDF page.
-    """
-
     try:
-        x = float(
-            text_element["x"]
-        )
-
-        y = float(
-            text_element["y"]
-        )
-
-        width = float(
-            text_element["width"]
-        )
-
-        height = float(
-            text_element["height"]
-        )
-
-        font_size = float(
-            text_element.get(
-                "fontSize",
-                14,
-            )
-        )
-
-        text = str(
-            text_element.get(
-                "text",
-                "",
-            )
-        )
-
-    except (
-        KeyError,
-        TypeError,
-        ValueError,
-    ):
+        x = float(text_element["x"])
+        y = float(text_element["y"])
+        width = float(text_element["width"])
+        height = float(text_element["height"])
+        font_size = float(text_element.get("fontSize", 14))
+        text = str(text_element.get("text", ""))
+        bold = bool(text_element.get("bold", False))
+        italic = bool(text_element.get("italic", False))
+        underline = bool(text_element.get("underline", False))
+    except (KeyError, TypeError, ValueError):
         raise HTTPException(
             status_code=400,
             detail="Invalid text element.",
@@ -424,36 +395,299 @@ def add_pdf_text(
     if width <= 0 or height <= 0:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Text element width and height "
-                "must be positive."
-            ),
+            detail="Text element width and height must be positive.",
         )
 
     if font_size <= 0:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Text element font size "
-                "must be positive."
-            ),
+            detail="Text element font size must be positive.",
         )
 
-    rect = pymupdf.Rect(
+    # ---------------------------------------------------------
+    # Select font
+    # ---------------------------------------------------------
+    if bold and italic:
+        font_name = "hebi"
+    elif bold:
+        font_name = "hebo"
+    elif italic:
+        font_name = "heit"
+    else:
+        font_name = "helv"
+
+    font = pymupdf.Font(fontname=font_name)
+
+    # ---------------------------------------------------------
+    # Wrap text
+    # ---------------------------------------------------------
+    def wrap_line(line: str) -> list[str]:
+        if not line:
+            return [""]
+
+        words = line.split(" ")
+        wrapped: list[str] = []
+        current = ""
+
+        for word in words:
+            if not current:
+                candidate = word
+            else:
+                candidate = current + " " + word
+
+            candidate_width = font.text_length(
+                candidate,
+                fontsize=font_size,
+            )
+
+            if candidate_width <= width:
+                current = candidate
+                continue
+
+            if current:
+                wrapped.append(current)
+
+            # Word itself is wider than textbox.
+            if font.text_length(
+                word,
+                fontsize=font_size,
+            ) > width:
+
+                partial = ""
+
+                for char in word:
+                    test = partial + char
+
+                    if font.text_length(
+                        test,
+                        fontsize=font_size,
+                    ) <= width:
+                        partial = test
+                    else:
+                        if partial:
+                            wrapped.append(partial)
+                        partial = char
+
+                current = partial
+
+            else:
+                current = word
+
+        if current:
+            wrapped.append(current)
+
+        return wrapped
+
+    # ---------------------------------------------------------
+    # Preserve explicit newlines
+    # ---------------------------------------------------------
+    lines: list[str] = []
+
+    for original_line in text.splitlines():
+        lines.extend(wrap_line(original_line))
+
+    if not lines:
+        lines = [""]
+
+    wrapped_text = "\n".join(lines)
+
+    # ---------------------------------------------------------
+    # Calculate line height
+    # ---------------------------------------------------------
+    line_height = (
+        font.ascender - font.descender
+    ) * font_size
+
+    # ---------------------------------------------------------
+    # IMPORTANT:
+    #
+    # Give PyMuPDF more vertical space than theoretically
+    # required. The original textbox height belongs to the
+    # editor UI and should not be used as the PDF rendering
+    # limit when text wraps.
+    # ---------------------------------------------------------
+    required_height = (
+        line_height * len(lines)
+        + font_size
+    )
+
+    # Add generous safety margin.
+    render_height = max(
+        height,
+        required_height + font_size,
+    )
+
+    render_rect = pymupdf.Rect(
         x,
         y,
         x + width,
-        y + height,
+        y + render_height,
     )
 
-    page.insert_textbox(
-        rect,
-        text,
+    print(
+        "[TEXT DEBUG]",
+        {
+            "page": page.number + 1,
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "font_size": font_size,
+            "text": text,
+            "underline": underline,
+            "lines": lines,
+            "line_height": line_height,
+            "required_height": required_height,
+            "render_height": render_height,
+        },
+    )
+
+    # ---------------------------------------------------------
+    # Insert text
+    # ---------------------------------------------------------
+    result = page.insert_textbox(
+        render_rect,
+        wrapped_text,
         fontsize=font_size,
-        fontname="helv",
+        fontname=font_name,
         color=(0, 0, 0),
         align=0,
     )
+
+    print("[TEXT RESULT]", result)
+
+    if result < 0:
+        raise RuntimeError(
+            f"Failed to render PDF text. "
+            f"insert_textbox returned {result}"
+        )
+
+    # ---------------------------------------------------------
+    # Underline
+    #
+    # Use the actual rendered PDF text geometry.
+    # ---------------------------------------------------------
+    if underline:
+        try:
+            text_dict = page.get_text(
+                "dict",
+                flags=pymupdf.TEXTFLAGS_TEXT,
+            )
+        except Exception as exc:
+            print(
+                "[UNDERLINE DEBUG] "
+                f"Failed to read rendered text: {exc}"
+            )
+            return
+
+        target_lines: list[dict] = []
+
+        remaining_lines = list(lines)
+
+        for block in text_dict.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+
+            for line in block.get("lines", []):
+                spans = line.get("spans", [])
+
+                if not spans:
+                    continue
+
+                line_text = "".join(
+                    str(span.get("text", ""))
+                    for span in spans
+                )
+
+                if not line_text:
+                    continue
+
+                matched_index = None
+
+                for index, expected_line in enumerate(
+                    remaining_lines
+                ):
+                    if (
+                        line_text.strip()
+                        == expected_line.strip()
+                    ):
+                        matched_index = index
+                        break
+
+                if matched_index is None:
+                    continue
+
+                bbox = line.get("bbox")
+
+                if bbox and len(bbox) >= 4:
+                    target_lines.append(
+                        {
+                            "text": line_text,
+                            "bbox": bbox,
+                            "spans": spans,
+                        }
+                    )
+
+                remaining_lines.pop(matched_index)
+
+                if not remaining_lines:
+                    break
+
+            if not remaining_lines:
+                break
+
+        # -----------------------------------------------------
+        # Draw underline from actual rendered line bbox.
+        # -----------------------------------------------------
+        for item in target_lines:
+            bbox = item["bbox"]
+
+            line_x0 = float(bbox[0])
+            line_y1 = float(bbox[3])
+
+            rendered_width = 0.0
+
+            for span in item["spans"]:
+                span_bbox = span.get("bbox")
+
+                if span_bbox and len(span_bbox) >= 4:
+                    span_width = (
+                        float(span_bbox[2])
+                        - float(span_bbox[0])
+                    )
+
+                    rendered_width += max(
+                        0.0,
+                        span_width,
+                    )
+
+            if rendered_width <= 0:
+                continue
+
+            # Very small offset from the actual bottom of glyphs.
+            underline_y = (
+                line_y1
+                + max(
+                    0.5,
+                    font_size * 0.03,
+                )
+            )
+
+            page.draw_line(
+                pymupdf.Point(
+                    line_x0,
+                    underline_y,
+                ),
+                pymupdf.Point(
+                    line_x0 + rendered_width,
+                    underline_y,
+                ),
+                color=(0, 0, 0),
+                width=max(
+                    0.5,
+                    font_size * 0.05,
+                ),
+            )
 
 def add_pdf_annotation(
     page: pymupdf.Page,

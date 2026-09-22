@@ -10,9 +10,18 @@ import {
 
 interface TextToolbarProps {
   fontSize: number
+
+  bold: boolean
+  italic: boolean
+  underline: boolean
+
   onChangeFontSize: (
     fontSize: number,
   ) => void
+
+  onToggleBold: () => void
+  onToggleItalic: () => void
+  onToggleUnderline: () => void
 }
 
 const MIN_FONT_SIZE = 6
@@ -20,7 +29,16 @@ const MAX_FONT_SIZE = 200
 
 export default function TextToolbar({
   fontSize,
+
+  bold,
+  italic,
+  underline,
+
   onChangeFontSize,
+
+  onToggleBold,
+  onToggleItalic,
+  onToggleUnderline,
 }: TextToolbarProps) {
   const [
     inputValue,
@@ -243,6 +261,47 @@ export default function TextToolbar({
       >
         <Plus size={16} />
       </button>
+
+      <button
+        type="button"
+        className={
+            bold
+            ? 'active'
+            : ''
+        }
+        title="Bold"
+        onClick={onToggleBold}
+        >
+        <strong>B</strong>
+        </button>
+
+        <button
+        type="button"
+        className={
+            italic
+            ? 'active'
+            : ''
+        }
+        title="Italic"
+        onClick={onToggleItalic}
+        >
+        <em>I</em>
+        </button>
+
+        <button
+        type="button"
+        className={
+            underline
+            ? 'active'
+            : ''
+        }
+        title="Underline"
+        onClick={
+            onToggleUnderline
+        }
+        >
+        <u>U</u>
+        </button>
     </div>
   )
 }

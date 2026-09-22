@@ -35,6 +35,9 @@ import useTextElements
 
 import useEditorHistory from './hooks/useEditorHistory'
 
+import useTextClipboard
+  from './hooks/useTextClipboard'
+
 import type {
   AnnotationType,
 } from './types/annotation'
@@ -74,13 +77,29 @@ export default function App() {
     setSelectedTextId,
   ] = useState<string | null>(null)
 
+  const [pastePosition, setPastePosition] =
+    useState<{
+      page: number
+      x: number
+      y: number
+    } | null>(null)
+
+  const {
+    copyText,
+    getCopiedText,
+  } =
+    useTextClipboard()
+
   const {
     textElements,
     addText,
     updateText,
     updateTextFontSize,
+    updateTextFormatting,
     removeText,
     moveText,
+    duplicateText,
+    pasteText,
     beginMoveText,
     endMoveText,
     beginResizeText,
@@ -319,6 +338,223 @@ export default function App() {
     setTextMode(false)
   }, [])
 
+  const handleDuplicateText = useCallback(() => {
+    if (!selectedTextId) {
+      return
+    }
+
+    const newId =
+      duplicateText(selectedTextId)
+
+    if (newId) {
+      setSelectedTextId(newId)
+    }
+  }, [
+    selectedTextId,
+    duplicateText,
+  ])
+
+  const handleCopyText =
+    useCallback(async () => {
+      if (!selectedTextId) {
+        return
+      }
+
+      const element =
+        textElements.find(
+          (item) =>
+            item.id === selectedTextId,
+        )
+
+      if (!element) {
+        return
+      }
+
+      await copyText(element)
+    }, [
+      selectedTextId,
+      textElements,
+      copyText,
+    ])
+  
+  const handlePasteText =
+  useCallback(async () => {
+    const {
+      element,
+      text,
+    } =
+      await getCopiedText()
+
+    if (element) {
+      const position =
+        pastePosition?.page ===
+        editor.currentPage
+          ? pastePosition
+          : {
+              page: editor.currentPage,
+              x: 100,
+              y: 100,
+            }
+
+      const newId =
+        pasteText(
+          element,
+          position.x,
+          position.y,
+        )
+
+      if (newId) {
+        setSelectedTextId(newId)
+      }
+
+      return
+    }
+
+    if (!text) {
+      return
+    }
+
+    const trimmedText =
+      text.trim()
+
+    if (!trimmedText) {
+      return
+    }
+
+    if (!editor.pdfFile) {
+      return
+    }
+
+    const position =
+      pastePosition?.page ===
+      editor.currentPage
+        ? pastePosition
+        : {
+            page: editor.currentPage,
+            x: 100,
+            y: 100,
+          }
+
+    const newId =
+      addText(
+        position.page,
+        position.x,
+        position.y,
+        trimmedText,
+      )
+
+    if (newId) {
+      setSelectedTextId(newId)
+    }
+  }, [
+    getCopiedText,
+    pasteText,
+    addText,
+    editor.pdfFile,
+    editor.currentPage,
+    pastePosition,
+  ])
+
+  const handleSetPastePosition =
+    useCallback(
+      (
+        page: number,
+        x: number,
+        y: number,
+      ) => {
+        setPastePosition({
+          page,
+          x,
+          y,
+        })
+      },
+      [],
+    )
+
+  const handleToggleTextBold =
+    useCallback(() => {
+      if (!selectedTextId) {
+        return
+      }
+
+      const element =
+        textElements.find(
+          (item) =>
+            item.id === selectedTextId,
+        )
+
+      if (!element) {
+        return
+      }
+
+      updateTextFormatting(
+        selectedTextId,
+        {
+          bold: !element.bold,
+        },
+      )
+    }, [
+      selectedTextId,
+      textElements,
+      updateTextFormatting,
+    ])
+
+  const handleToggleTextItalic =
+    useCallback(() => {
+      if (!selectedTextId) {
+        return
+      }
+
+      const element =
+        textElements.find(
+          (item) =>
+            item.id === selectedTextId,
+        )
+
+      if (!element) {
+        return
+      }
+
+      updateTextFormatting(
+        selectedTextId,
+        {
+          italic: !element.italic,
+        },
+      )
+    }, [
+      selectedTextId,
+      textElements,
+      updateTextFormatting,
+    ])
+
+  const handleToggleTextUnderline =
+    useCallback(() => {
+      if (!selectedTextId) {
+        return
+      }
+
+      const element =
+        textElements.find(
+          (item) =>
+            item.id === selectedTextId,
+        )
+
+      if (!element) {
+        return
+      }
+
+      updateTextFormatting(
+        selectedTextId,
+        {
+          underline: !element.underline,
+        },
+      )
+    }, [
+      selectedTextId,
+      textElements,
+      updateTextFormatting,
+    ])
+
   const handleLoadAnnotations =
     useCallback(
       (next: typeof annotations) => {
@@ -458,12 +694,24 @@ export default function App() {
     onCloseMenu:
       closeTopMenu,
 
+    onDuplicateText:
+      handleDuplicateText,
+
+    onCopyText:
+      handleCopyText,
+
+    onPasteText:
+      handlePasteText,
+
     disabled:
       editor.processing ||
       isSaving,
 
     hasPDF:
       !!editor.pdfFile,
+    
+    hasSelectedText:
+      selectedTextId !== null,
 
   })
 
@@ -817,6 +1065,18 @@ export default function App() {
           setTextMode
         }
 
+        onToggleBold={
+          handleToggleTextBold
+        }
+
+        onToggleItalic={
+          handleToggleTextItalic
+        }
+
+        onToggleUnderline={
+          handleToggleTextUnderline
+        }
+
         /*
          * Annotation
          */
@@ -1024,6 +1284,10 @@ export default function App() {
 
                 onPageChange={
                   editor.setCurrentPage
+                }
+
+                onSetPastePosition={
+                  handleSetPastePosition
                 }
 
               />

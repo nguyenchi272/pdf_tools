@@ -124,6 +124,21 @@ export default function PDFTextLayer({
                 fontSize:
                   element.fontSize *
                   zoom,
+                  
+                fontWeight:
+                    element.bold
+                    ? 'bold'
+                    : 'normal',
+
+                fontStyle:
+                    element.italic
+                    ? 'italic'
+                    : 'normal',
+
+                textDecoration:
+                    element.underline
+                    ? 'underline'
+                    : 'none',
               }}
             >
               {element.text}

@@ -13,8 +13,13 @@ interface KeyboardShortcutOptions {
 
   onCloseMenu: () => void
 
+  onDuplicateText: () => void
+  onCopyText: () => void
+  onPasteText: () => void
+
   disabled?: boolean
   hasPDF?: boolean
+  hasSelectedText?: boolean
 }
 
 export default function useKeyboardShortcuts({
@@ -26,8 +31,12 @@ export default function useKeyboardShortcuts({
   onZoomIn,
   onZoomOut,
   onCloseMenu,
+  onDuplicateText,
+  onCopyText,
+  onPasteText,
   disabled = false,
   hasPDF = false,
+  hasSelectedText = false,
 }: KeyboardShortcutOptions) {
 
   useEffect(() => {
@@ -131,6 +140,43 @@ export default function useKeyboardShortcuts({
       }
 
       /*
+       * Ctrl + D
+       */
+      if (key === 'd') {
+        event.preventDefault()
+        onCloseMenu()
+
+        onDuplicateText()
+
+        return
+      }
+
+      /*
+       * Ctrl + C
+       */
+      if (key === 'c') {
+        if (hasSelectedText){
+          event.preventDefault()
+          onCloseMenu()
+
+          onCopyText()
+        }
+        return
+      }
+
+      /*
+       * Ctrl + V
+       */
+      if (key === 'v') {
+        event.preventDefault()
+        onCloseMenu()
+
+        onPasteText()
+
+        return
+      }
+
+      /*
        * Ctrl + =
        */
       if (key === '=') {
@@ -179,7 +225,11 @@ export default function useKeyboardShortcuts({
     onZoomIn,
     onZoomOut,
     onCloseMenu,
+    onDuplicateText,
+    onCopyText,
+    onPasteText,
     disabled,
     hasPDF,
+    hasSelectedText,
   ])
 }

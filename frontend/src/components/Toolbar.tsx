@@ -89,6 +89,9 @@ interface ToolbarProps {
   onUndo: () => void
   onRedo: () => void
   onSelectTool: () => void
+  onToggleBold: () => void
+  onToggleItalic: () => void
+  onToggleUnderline: () => void
 }
 
 
@@ -134,6 +137,9 @@ export default function Toolbar({
   onUndo,
   onRedo,
   onSelectTool,
+  onToggleBold,
+  onToggleItalic,
+  onToggleUnderline,
 }: ToolbarProps) {
 
   const [
@@ -662,10 +668,11 @@ export default function Toolbar({
 
       {selectedTextElement && (
         <TextToolbar
-            fontSize={
+          fontSize={
             selectedTextElement.fontSize
-            }
-            onChangeFontSize={(
+          }
+
+          onChangeFontSize={(
             fontSize,
             ) => {
             onUpdateTextFontSize(
@@ -673,6 +680,31 @@ export default function Toolbar({
                 fontSize,
             )
             }}
+
+              bold={
+                selectedTextElement.bold
+            }
+
+            italic={
+                selectedTextElement.italic
+            }
+
+            underline={
+                selectedTextElement.underline
+            }
+
+            onToggleBold={
+                onToggleBold
+            }
+
+            onToggleItalic={
+                onToggleItalic
+            }
+
+            onToggleUnderline={
+                onToggleUnderline
+            }
+
         />
       )}
 

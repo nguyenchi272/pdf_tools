@@ -7,4 +7,7 @@ export interface TextElement {
   height: number
   text: string
   fontSize: number
+  bold: boolean
+  italic: boolean
+  underline: boolean
 }

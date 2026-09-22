@@ -124,6 +124,12 @@ interface PDFViewerProps {
   onPageChange: (
     page: number,
   ) => void
+
+  onSetPastePosition: (
+    page: number,
+    x: number,
+    y: number,
+  ) => void
 }
 
 
@@ -163,6 +169,7 @@ export default function PDFViewer({
 
   onNumPages,
   onPageChange,
+  onSetPastePosition,
 }: PDFViewerProps) {
   const containerRef =
     useRef<HTMLDivElement>(
@@ -586,6 +593,8 @@ export default function PDFViewer({
               onPageRef={
                 registerPageRef
               }
+
+              onSetPastePosition={onSetPastePosition}
             />
           )
         },

@@ -115,6 +115,12 @@ interface PDFPageProps {
     page: number,
     element: HTMLDivElement | null,
   ) => void
+
+  onSetPastePosition: (
+    page: number,
+    x: number,
+    y: number,
+    ) => void
 }
 
 
@@ -150,6 +156,7 @@ export default function PDFPage({
   onRemoveAnnotation,
 
   onPageRef,
+  onSetPastePosition,
 }: PDFPageProps) {
   const canvasRef =
     useRef<HTMLCanvasElement>(
@@ -900,65 +907,69 @@ export default function PDFPage({
     const pageBounds =
       pageContainer.getBoundingClientRect()
 
-    /*
-     * =================================================
-     * ADD TEXT
-     * =================================================
-     */
-
-    if (textMode) {
-      const point =
-        pointToPDFCoordinates(
-          event.clientX,
-          event.clientY,
-          pageBounds,
-          zoom,
-        )
-
-      setTextEditor({
-        x: point.x,
-        y: point.y,
-
-        screenX:
-          event.clientX,
-
-        screenY:
-          event.clientY,
-      })
-
-      setTextValue('')
-
-      return
-    }
-
-    /*
-     * =================================================
-     * NOTE
-     * =================================================
-     */
-
-    if (
-      annotationMode !== 'note'
-    ) {
-      return
-    }
-
     const point =
-      pointToPDFCoordinates(
+    pointToPDFCoordinates(
         event.clientX,
         event.clientY,
         pageBounds,
         zoom,
-      )
+    )
 
-    setNoteEditor({
-      x: point.x,
-      y: point.y,
+    /*
+    * =================================================
+    * SAVE LAST PASTE POSITION
+    * =================================================
+    */
 
-      screenX:
+    onSetPastePosition(
+    pageNumber,
+    point.x,
+    point.y,
+    )
+
+    /*
+    * =================================================
+    * ADD TEXT
+    * =================================================
+    */
+
+    if (textMode) {
+    setTextEditor({
+        x: point.x,
+        y: point.y,
+
+        screenX:
         event.clientX,
 
-      screenY:
+        screenY:
+        event.clientY,
+    })
+
+    setTextValue('')
+
+    return
+    }
+
+    /*
+    * =================================================
+    * NOTE
+    * =================================================
+    */
+
+    if (
+    annotationMode !== 'note'
+    ) {
+    return
+    }
+
+    setNoteEditor({
+    x: point.x,
+    y: point.y,
+
+    screenX:
+        event.clientX,
+
+    screenY:
         event.clientY,
     })
 

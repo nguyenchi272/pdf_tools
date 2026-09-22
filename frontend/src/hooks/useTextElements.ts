@@ -86,12 +86,17 @@ export default function useTextElements({
         height: 40,
         text: trimmedText,
         fontSize: 14,
+        bold: false,
+        italic: false,
+        underline: false,
       }
 
       commit([
         ...elementsRef.current,
         element,
       ])
+
+      return element.id
     },
     [commit],
   )
@@ -189,6 +194,45 @@ export default function useTextElements({
     [commit],
   )
 
+  //FORMATTING
+  const updateTextFormatting =
+    useCallback(
+        (
+        id: string,
+        formatting: {
+            bold?: boolean
+            italic?: boolean
+            underline?: boolean
+        },
+        ) => {
+        const current =
+            elementsRef.current
+
+        const exists =
+            current.some(
+            (element) =>
+                element.id === id,
+            )
+
+        if (!exists) {
+            return
+        }
+
+        const next =
+            current.map((element) =>
+            element.id === id
+                ? {
+                    ...element,
+                    ...formatting,
+                }
+                : element,
+            )
+
+        commit(next)
+        },
+        [commit],
+    )
+
   // --------------------------------------------------
   // DELETE
   // --------------------------------------------------
@@ -215,6 +259,69 @@ export default function useTextElements({
     },
     [commit],
   )
+
+  // --------------------------------------------------
+  // DUPLICATE
+  // --------------------------------------------------
+
+  const duplicateText = useCallback(
+    (id: string) => {
+      const current =
+        elementsRef.current
+
+      const source =
+        current.find(
+          (element) =>
+            element.id === id,
+        )
+
+      if (!source) {
+        return null
+      }
+
+      const duplicate: TextElement = {
+        ...source,
+        id: crypto.randomUUID(),
+        x: source.x + 20,
+        y: source.y + 20,
+      }
+
+      commit([
+        ...current,
+        duplicate,
+      ])
+
+      return duplicate.id
+    },
+    [commit],
+  )
+
+  // --------------------------------------------------
+  // PASTE
+  // --------------------------------------------------
+
+    const pasteText = useCallback(
+    (
+        element: TextElement,
+        x: number,
+        y: number,
+    ) => {
+        const pasted: TextElement = {
+        ...element,
+        id: crypto.randomUUID(),
+        x,
+        y,
+        }
+
+        commit([
+        ...elementsRef.current,
+        pasted,
+        ])
+
+        return pasted.id
+    },
+    [commit],
+    )
 
   // --------------------------------------------------
   // DRAG
@@ -513,7 +620,10 @@ export default function useTextElements({
     addText,
     updateText,
     updateTextFontSize,
+    updateTextFormatting,
     removeText,
+    duplicateText,
+    pasteText,
 
     beginMoveText,
     moveText,

@@ -1536,3 +1536,8 @@ body {
   text-align: center;
   font-size: 13px;
 }
+
+.text-toolbar button.active {
+  background: #2563eb;
+  color: #fff;
+}
