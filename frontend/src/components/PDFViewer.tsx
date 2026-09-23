@@ -450,6 +450,11 @@ export default function PDFViewer({
       null,
     )
 
+  const searchInputRef =
+    useRef<HTMLInputElement | null>(
+      null,
+    )
+
   const pageRefs =
     useRef<
       Map<
@@ -508,21 +513,14 @@ export default function PDFViewer({
       (
         query: string,
       ) => {
+        if (!query.trim()){
 
-        setSearchQuery(
-          query,
-        )
+        setSearchQuery('')
 
-        setCurrentMatchIndex(
-          0,
-        )
+        setCurrentMatchIndex(0)
 
-        if (!query.trim()) {
-
-          clearSearch()
-
+        clearSearch
         }
-
       },
       [
         clearSearch,
@@ -614,7 +612,6 @@ export default function PDFViewer({
     const previous =
       searchHighlightRef.current
 
-
     if (previous) {
 
       previous.remove()
@@ -642,7 +639,6 @@ export default function PDFViewer({
         currentMatchIndex
       ]
 
-
     if (!match) {
       return
     }
@@ -653,16 +649,22 @@ export default function PDFViewer({
         match.pageNumber,
       )
 
-
     if (!page) {
       return
     }
 
 
     /*
-    * The page may still be rendering its PDF.js
-    * text layer.
+    * =====================================================
+    * HIGHLIGHT
+    * =====================================================
+    *
+    * Use the actual PDF.js text span as the reference.
+    *
+    * This makes the highlight follow the same coordinate
+    * system as the rendered text layer.
     */
+
     const highlightMatch =
       () => {
 
@@ -671,18 +673,24 @@ export default function PDFViewer({
             '.textLayer',
           ) as HTMLElement | null
 
-
         if (!textLayer) {
           return false
         }
 
 
         /*
-        * Search occurrence index inside this page.
-        *
-        * PDFSearch returns matches in document order,
-        * therefore only matches from the same page that
-        * appear before the current match are counted.
+        * PDF.js must have finished rendering text.
+        */
+
+        if (
+          textLayer.children.length === 0
+        ) {
+          return false
+        }
+
+
+        /*
+        * Calculate occurrence inside this page.
         */
 
         const pageOccurrenceIndex =
@@ -712,21 +720,10 @@ export default function PDFViewer({
         }
 
 
-        const pageContainer =
-          page.querySelector(
-            '.pdf-page-container',
-          ) as HTMLElement | null
-
-
-        if (!pageContainer) {
-          return false
-        }
-
-
         /*
-        * Create temporary search highlight.
-        *
-        * This is UI-only and is NOT saved into PDF.
+        * =================================================
+        * CREATE HIGHLIGHT
+        * =================================================
         */
 
         const highlight =
@@ -734,13 +731,25 @@ export default function PDFViewer({
             'div',
           )
 
-
         highlight.className =
           'pdf-search-highlight'
 
 
-        const pageBounds =
-          pageContainer.getBoundingClientRect()
+        /*
+        * Put the highlight INSIDE the text layer.
+        *
+        * This is important because the text layer and
+        * highlight now use exactly the same coordinate
+        * system.
+        */
+
+        textLayer.appendChild(
+          highlight,
+        )
+
+
+        const textLayerBounds =
+          textLayer.getBoundingClientRect()
 
 
         const rects =
@@ -759,17 +768,16 @@ export default function PDFViewer({
               'div',
             )
 
-
           item.className =
             'pdf-search-highlight-rect'
 
 
           item.style.left =
-            `${rect.left - pageBounds.left}px`
+            `${rect.left - textLayerBounds.left}px`
 
 
           item.style.top =
-            `${rect.top - pageBounds.top}px`
+            `${rect.top - textLayerBounds.top}px`
 
 
           item.style.width =
@@ -786,17 +794,12 @@ export default function PDFViewer({
         }
 
 
-        pageContainer.appendChild(
-          highlight,
-        )
-
-
         searchHighlightRef.current =
           highlight
 
 
         /*
-        * Scroll the matched page into view.
+        * Scroll matched page into view.
         */
 
         page.scrollIntoView({
@@ -806,7 +809,7 @@ export default function PDFViewer({
 
 
         /*
-        * Remove native browser selection.
+        * Clear browser selection.
         */
 
         window
@@ -830,8 +833,8 @@ export default function PDFViewer({
 
 
     /*
-    * PDF.js may still be rendering the text layer.
-    * Retry once shortly afterwards.
+    * PDF.js may still be rendering the new viewport
+    * after zoom / rotation.
     */
 
     const timer =
@@ -841,7 +844,7 @@ export default function PDFViewer({
           highlightMatch()
 
         },
-        150,
+        200,
       )
 
 
@@ -858,6 +861,8 @@ export default function PDFViewer({
     searchQuery,
     matches,
     currentMatchIndex,
+    zoom,
+    rotation,
   ])
 
 
@@ -1050,9 +1055,28 @@ export default function PDFViewer({
 
           event.preventDefault()
 
-          setSearchOpen(
-            true,
-          )
+          setSearchOpen(true)
+
+          /*
+          * Search bar may already be open.
+          * Focus the existing input and select all text.
+          */
+
+          window.setTimeout(() => {
+
+            const input =
+              document.querySelector(
+                '.pdf-search input',
+              ) as HTMLInputElement | null
+
+            if (!input) {
+              return
+            }
+
+            input.focus()
+            input.select()
+
+          }, 0)
 
           return
         }
