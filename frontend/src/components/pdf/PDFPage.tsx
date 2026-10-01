@@ -121,6 +121,17 @@ interface PDFPageProps {
     x: number,
     y: number,
     ) => void
+
+  onTextSelection?: (
+    selection: {
+        text: string
+        page: number
+        x: number
+        y: number
+        width: number
+        height: number
+    } | null,
+    ) => void
 }
 
 
@@ -157,6 +168,7 @@ export default function PDFPage({
 
   onPageRef,
   onSetPastePosition,
+  onTextSelection,
 }: PDFPageProps) {
   const canvasRef =
     useRef<HTMLCanvasElement>(
@@ -675,190 +687,183 @@ export default function PDFPage({
    * =====================================================
    */
 
-  const handleMouseUp =
-    () => {
-      /*
-       * Note does not use
-       * text selection.
-       */
+  const handleMouseUp = () => {
+    const selection = window.getSelection()
 
-      if (
-        !annotationMode ||
-        annotationMode === 'note'
-      ) {
-        return
-      }
+    if (!selection) {
+      onTextSelection?.(null)
+      return
+    }
 
+    if (
+      selection.isCollapsed ||
+      selection.rangeCount === 0
+    ) {
+      onTextSelection?.(null)
+      return
+    }
 
-      const selection =
-        window.getSelection()
+    const range = selection.getRangeAt(0)
 
+    /*
+     * Find selected page.
+     */
+    let node: Node | null =
+      range.commonAncestorContainer
 
-      if (!selection) {
-        return
-      }
+    if (
+      node.nodeType === Node.TEXT_NODE
+    ) {
+      node = node.parentElement
+    }
 
+    if (!(node instanceof HTMLElement)) {
+      onTextSelection?.(null)
+      return
+    }
 
-      if (
-        selection.isCollapsed ||
-        selection.rangeCount === 0
-      ) {
-        return
-      }
+    const pageElement =
+      node.closest('.pdf-page-wrapper')
 
+    if (
+      !(pageElement instanceof HTMLElement)
+    ) {
+      onTextSelection?.(null)
+      return
+    }
 
-      const range =
-        selection.getRangeAt(0)
+    const selectedPage =
+      Number(pageElement.dataset.page)
 
+    if (
+      selectedPage !== pageNumber
+    ) {
+      onTextSelection?.(null)
+      return
+    }
 
-      /*
-       * Find selected page.
-       */
+    /*
+     * Get page container.
+     */
+    const pageContainer =
+      pageContainerRef.current
 
-      let node:
-        | Node
-        | null =
-        range.commonAncestorContainer
+    if (!pageContainer || !page) {
+      onTextSelection?.(null)
+      return
+    }
 
-
-      if (
-        node.nodeType ===
-        Node.TEXT_NODE
-      ) {
-        node =
-          node.parentElement
-      }
-
-
-      if (
-        !(node instanceof HTMLElement)
-      ) {
-        return
-      }
-
-
-      const pageElement =
-        node.closest(
-          '.pdf-page-wrapper',
-        )
-
-
-      if (
-        !(pageElement instanceof HTMLElement)
-      ) {
-        return
-      }
-
-
-      const selectedPage =
-        Number(
-          pageElement.dataset.page,
-        )
-
-
-      if (
-        selectedPage !==
-        pageNumber
-      ) {
-        return
-      }
-
-
-      /*
-       * Get page container.
-       */
-
-      const pageContainer =
-        pageContainerRef.current
-
-
-      if (!pageContainer) {
-        return
-      }
-
-
-      /*
-       * Get selection rectangles.
-       */
-
-      const selectionRects =
-        Array.from(
-          range.getClientRects(),
-        )
-
-
-      if (
-        selectionRects.length === 0
-      ) {
-        return
-      }
-
-
-      const pageBounds =
-        pageContainer.getBoundingClientRect()
-
-
-      /*
-       * Convert to PDF coordinates.
-       */
-
-      const rects:
-        AnnotationRect[] =
-        selectionRects
-          .map(
-            (rect) => ({
-              x:
-                (
-                  rect.left -
-                  pageBounds.left
-                ) / zoom,
-
-              y:
-                (
-                  rect.top -
-                  pageBounds.top
-                ) / zoom,
-
-              width:
-                rect.width /
-                zoom,
-
-              height:
-                rect.height /
-                zoom,
-            }),
-          )
-          .filter(
-            (rect) =>
-              rect.width > 1 &&
-              rect.height > 1,
-          )
-
-
-      if (
-        rects.length === 0
-      ) {
-        return
-      }
-
-
-      /*
-       * Create annotation.
-       */
-
-      onAddAnnotation(
-        pageNumber,
-        annotationMode,
-        rects,
+    /*
+     * Get selection rectangles.
+     */
+    const selectionRects =
+      Array.from(
+        range.getClientRects(),
       )
 
-
-      /*
-       * Clear browser selection.
-       */
-
-      selection.removeAllRanges()
+    if (
+      selectionRects.length === 0
+    ) {
+      onTextSelection?.(null)
+      return
     }
+
+    /*
+     * Selected text.
+     */
+    const selectedText =
+      selection.toString().trim()
+
+    if (!selectedText) {
+      onTextSelection?.(null)
+      return
+    }
+
+    /*
+     * Current PDF.js viewport.
+     *
+     * Using convertToPdfPoint() makes
+     * the coordinates work correctly
+     * with zoom and rotation.
+     */
+    const viewport =
+      page.getViewport({
+        scale: zoom,
+        rotation,
+      })
+
+    const firstRect =
+      selectionRects[0]
+
+    const pageBounds =
+      pageContainer.getBoundingClientRect()
+
+    const [x, y] =
+      viewport.convertToPdfPoint(
+        firstRect.left -
+          pageBounds.left,
+        firstRect.top -
+          pageBounds.top,
+      )
+
+    /*
+     * Notify parent about the selected text.
+     *
+     * Keep the browser selection when
+     * there is no annotation mode so
+     * the user can continue to work with
+     * the selected text.
+     */
+    onTextSelection?.({
+      text: selectedText,
+      page: pageNumber,
+      x,
+      y,
+      width: firstRect.width / zoom,
+      height: firstRect.height / zoom,
+    })
+
+    /*
+     * Annotation mode.
+     *
+     * Existing annotation behaviour is
+     * preserved.
+     */
+    if (
+        annotationMode &&
+        annotationMode !== 'note'
+        ) {
+        const rects: AnnotationRect[] =
+            selectionRects
+            .map((rect) => ({
+                x:
+                (rect.left - pageBounds.left) /
+                zoom,
+                y:
+                (rect.top - pageBounds.top) /
+                zoom,
+                width:
+                rect.width / zoom,
+                height:
+                rect.height / zoom,
+            }))
+            .filter(
+                (rect) =>
+                rect.width > 1 &&
+                rect.height > 1,
+            )
+
+        if (rects.length > 0) {
+            onAddAnnotation(
+            pageNumber,
+            annotationMode,
+            rects,
+            )
+        }
+
+        selection.removeAllRanges()
+        }
+  }
 
 
   /*

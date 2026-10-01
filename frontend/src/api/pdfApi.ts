@@ -1,6 +1,15 @@
 import type { Annotation } from '../types/annotation'
 import type { TextElement } from '../types/text'
 
+export interface PDFBookmark {
+  id: string
+  title: string
+  pageNumber: number
+  left: number
+  top: number
+  level: number
+}
+
 const API_BASE = 'http://localhost:8090'
 
 /**
@@ -236,6 +245,7 @@ export async function saveAnnotations(
   pdfUrl: string,
   annotations: Annotation[],
   textElements: TextElement[] = [],
+  bookmarks: PDFBookmark[] = [],
 ): Promise<File> {
   const pdfResponse =
     await fetch(pdfUrl)
@@ -268,6 +278,11 @@ export async function saveAnnotations(
   formData.append(
     'text_elements',
     JSON.stringify(textElements),
+  )
+
+  formData.append(
+    'bookmarks',
+    JSON.stringify(bookmarks),
   )
 
   const response =
@@ -321,4 +336,47 @@ export async function saveAnnotations(
       type: 'application/pdf',
     },
   )
+}
+
+export async function loadOpenPDFBookmarks(
+  pdfUrl: string,
+): Promise<PDFBookmark[]> {
+  const response = await fetch(
+    pdfUrl,
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      'Failed to load PDF.',
+    )
+  }
+
+  const blob =
+    await response.blob()
+
+  const formData =
+    new FormData()
+
+  formData.append(
+    'file',
+    blob,
+    'document.pdf',
+  )
+
+  const result =
+    await fetch(
+      'http://localhost:8090/api/pdf/openpdf-bookmarks',
+      {
+        method: 'POST',
+        body: formData,
+      },
+    )
+
+  if (!result.ok) {
+    throw new Error(
+      'Failed to load OpenPDF bookmarks.',
+    )
+  }
+
+  return result.json()
 }

@@ -2,15 +2,35 @@ import { useEffect, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import PDFOutline from './PDFOutline'
+import type { PDFOutlineItem } from '../hooks/usePDFOutline'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker
 
+interface BookmarkTarget {
+  text: string
+  page: number
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+interface PDFBookmark {
+  id: string
+  title: string
+  pageNumber: number
+  left: number
+  top: number
+  level: number
+}
 
 interface SidebarProps {
   pdfUrl: string
   numPages: number
   currentPage: number
   selectedPages: number[]
+  bookmarks: PDFBookmark[]
 
   onPageChange: (page: number) => void
   onSelectionChange: (pages: number[]) => void
@@ -18,6 +38,34 @@ interface SidebarProps {
   onReorder: (
     draggedPage: number,
     targetPage: number,
+  ) => void
+
+  outline: PDFOutlineItem[]
+  onOutlineItemClick: (
+    item: PDFOutlineItem,
+  ) => void
+
+  selectedBookmarkTarget:
+    BookmarkTarget | null
+
+  onAddBookmark: () => void
+
+  onChangeBookmarkLevel: (
+    id: string,
+    level: number,
+  ) => void
+
+  onDeleteBookmark: (
+    id: string,
+  ) => void
+
+  onEditBookmarkTitle: (
+    id: string,
+    title: string,
+  ) => void
+
+  onBookmarkClick: (
+    bookmark: PDFBookmark,
   ) => void
 }
 
@@ -27,9 +75,18 @@ export default function Sidebar({
   numPages,
   currentPage,
   selectedPages,
+  outline,
+  selectedBookmarkTarget,
+  bookmarks,
   onPageChange,
   onSelectionChange,
   onReorder,
+  onOutlineItemClick,
+  onAddBookmark,
+  onChangeBookmarkLevel,
+  onDeleteBookmark,
+  onEditBookmarkTitle,
+  onBookmarkClick,
 }: SidebarProps) {
 
   const [thumbnails, setThumbnails] =
@@ -41,6 +98,18 @@ export default function Sidebar({
   const [dragOverPage, setDragOverPage] =
     useState<number | null>(null)
 
+  const [activeTab, setActiveTab] =
+    useState<'pages' | 'outline'>('pages')
+
+  const [
+    editingBookmarkId,
+    setEditingBookmarkId,
+  ] = useState<string | null>(null)
+
+  const [
+    editingBookmarkTitle,
+    setEditingBookmarkTitle,
+  ] = useState('')
 
   /*
    * Load thumbnails
@@ -282,26 +351,81 @@ export default function Sidebar({
     setDragOverPage(null)
   }
 
+  /*
+  * Bookmark editing
+  */
+
+  const startEditingBookmark = (
+    bookmark: PDFBookmark,
+  ) => {
+    setEditingBookmarkId(bookmark.id)
+    setEditingBookmarkTitle(bookmark.title)
+  }
+
+  const cancelEditingBookmark = () => {
+    setEditingBookmarkId(null)
+    setEditingBookmarkTitle('')
+  }
+
+  const saveEditingBookmark = (
+    bookmark: PDFBookmark,
+  ) => {
+    const newTitle =
+      editingBookmarkTitle.trim()
+
+    if (!newTitle) {
+      cancelEditingBookmark()
+      return
+    }
+
+    onEditBookmarkTitle(
+      bookmark.id,
+      newTitle,
+    )
+
+    setEditingBookmarkId(null)
+    setEditingBookmarkTitle('')
+  }
 
   return (
 
     <aside className="sidebar">
 
-      <div className="sidebar-header">
+      <div className="sidebar-tabs">
 
-        <span>
+        <button
+          type="button"
+          className={
+            activeTab === 'pages'
+              ? 'sidebar-tab active'
+              : 'sidebar-tab'
+          }
+          onClick={() => setActiveTab('pages')}
+        >
           Pages
-        </span>
 
-        {selectedPages.length > 0 && (
-          <span className="selected-count">
-            {selectedPages.length}
-          </span>
-        )}
+          {selectedPages.length > 0 && (
+            <span className="selected-count">
+              {selectedPages.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className={
+            activeTab === 'outline'
+              ? 'sidebar-tab active'
+              : 'sidebar-tab'
+          }
+          onClick={() => setActiveTab('outline')}
+        >
+          Bookmarks
+        </button>
 
       </div>
 
-
+      {activeTab === 'pages' && (
       <div className="thumbnail-container">
 
         {Array.from(
@@ -422,6 +546,160 @@ export default function Sidebar({
         )}
 
       </div>
+      )}
+
+      {activeTab === 'outline' && (
+        <div className="bookmarks-container">
+
+          {/* ADD BOOKMARK */}
+          <div className="bookmarks-toolbar">
+            <button
+              type="button"
+              className="bookmark-add-button"
+              onClick={onAddBookmark}
+              disabled={!selectedBookmarkTarget}
+              title={
+                selectedBookmarkTarget
+                  ? 'Add bookmark from selected text'
+                  : 'Select text in the PDF first'
+              }
+            >
+              <span>＋</span>
+              <span>Add Bookmark</span>
+            </button>
+          </div>
+
+          {/* USER BOOKMARKS */}
+          <div className="bookmarks-list">
+            {bookmarks.map((bookmark) => (
+              <div
+                key={bookmark.id}
+                className="bookmark-item"
+                style={{
+                  paddingLeft: `${12 + bookmark.level * 16}px`,
+                }}
+                title={
+                  editingBookmarkId === bookmark.id
+                    ? undefined
+                    : bookmark.title
+                }
+                onClick={() => {
+                  onBookmarkClick(bookmark)
+                }}
+              >
+                <span className="bookmark-icon">
+                  🔖
+                </span>
+
+                {editingBookmarkId === bookmark.id ? (
+                  <input
+                    type="text"
+                    className="bookmark-title-input"
+                    value={editingBookmarkTitle}
+                    autoFocus
+
+                    onChange={(event) => {
+                      setEditingBookmarkTitle(
+                        event.target.value,
+                      )
+                    }}
+
+                    onClick={(event) => {
+                      event.stopPropagation()
+                    }}
+
+                    onDoubleClick={(event) => {
+                      event.stopPropagation()
+                    }}
+
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+
+                        saveEditingBookmark(
+                          bookmark,
+                        )
+                      }
+
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+
+                        cancelEditingBookmark()
+                      }
+                    }}
+
+                    onBlur={() => {
+                      saveEditingBookmark(
+                        bookmark,
+                      )
+                    }}
+                  />
+                ) : (
+                  <span
+                    className="bookmark-title"
+                    onDoubleClick={(event) => {
+                      event.stopPropagation()
+
+                      startEditingBookmark(
+                        bookmark,
+                      )
+                    }}
+                  >
+                    {bookmark.title}
+                  </span>
+                )}
+
+                <span className="bookmark-page">
+                  {bookmark.pageNumber}
+                </span>
+
+                <div className="bookmark-actions">
+                  <button
+                    type="button"
+                    title="Decrease level"
+                    disabled={bookmark.level === 0}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onChangeBookmarkLevel(
+                        bookmark.id,
+                        bookmark.level - 1,
+                      )
+                    }}
+                  >
+                    ←
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Increase level"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onChangeBookmarkLevel(
+                        bookmark.id,
+                        bookmark.level + 1,
+                      )
+                    }}
+                  >
+                    →
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Delete bookmark"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onDeleteBookmark(bookmark.id)
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      )}  
 
     </aside>
   )

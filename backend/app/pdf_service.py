@@ -1,6 +1,7 @@
 import json
-
+import base64
 import pymupdf
+import re
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse, Response
@@ -799,11 +800,296 @@ def add_pdf_annotation(
 
         return
 
+OPENPDF_XMP_MARKER = "openpdf:bookmarks"
+
+
+def encode_openpdf_bookmarks(
+    bookmarks: list,
+) -> str:
+    payload = json.dumps(
+        bookmarks,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+    return base64.b64encode(
+        payload.encode("utf-8")
+    ).decode("ascii")
+
+
+def decode_openpdf_bookmarks(
+    value: str | None,
+) -> list:
+    if not value:
+        return []
+
+    try:
+        payload = base64.b64decode(
+            value.encode("ascii")
+        ).decode("utf-8")
+
+        data = json.loads(payload)
+
+        if isinstance(data, list):
+            return data
+
+    except Exception:
+        pass
+
+    return []
+
+def build_openpdf_xmp(
+    bookmarks: list,
+) -> str:
+    encoded = encode_openpdf_bookmarks(
+        bookmarks
+    )
+
+    return f'''<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta
+    xmlns:x="adobe:ns:meta/"
+    x:xmptk="OpenPDF">
+  <rdf:RDF
+      xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description
+        rdf:about=""
+        xmlns:openpdf="https://openpdf.local/ns/1.0/">
+      <openpdf:bookmarks>{encoded}</openpdf:bookmarks>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>'''
+
+def add_pdf_bookmarks(
+    doc: pymupdf.Document,
+    bookmarks: list,
+) -> None:
+    """
+    Replace the PDF outline with the current OpenPDF bookmarks.
+
+    The frontend `bookmarks` list is the single source of truth.
+
+    This means:
+    - Existing native PDF bookmarks are replaced by the current list.
+    - Deleted bookmarks are really removed.
+    - Edited titles/destinations are saved without duplicates.
+    - Changed bookmark levels are preserved.
+    - An empty bookmark list clears the PDF outline.
+    """
+
+    bookmark_toc = []
+
+    previous_level = 0
+
+    for bookmark in bookmarks:
+
+        if not isinstance(
+            bookmark,
+            dict,
+        ):
+            continue
+
+        title = bookmark.get(
+            'title'
+        )
+
+        page_number = bookmark.get(
+            'pageNumber'
+        )
+
+        left = bookmark.get(
+            'left',
+            0,
+        )
+
+        top = bookmark.get(
+            'top',
+            0,
+        )
+
+        level = bookmark.get(
+            'level',
+            0,
+        )
+
+        # ----------------------------------------------------
+        # Validate title
+        # ----------------------------------------------------
+
+        if not isinstance(
+            title,
+            str,
+        ):
+            continue
+
+        title = title.strip()
+
+        if not title:
+            continue
+
+        # ----------------------------------------------------
+        # Validate page
+        # ----------------------------------------------------
+
+        if not isinstance(
+            page_number,
+            int,
+        ):
+            continue
+
+        if (
+            page_number < 1
+            or page_number > doc.page_count
+        ):
+            continue
+
+        # ----------------------------------------------------
+        # Validate level
+        # ----------------------------------------------------
+
+        if not isinstance(
+            level,
+            int,
+        ):
+            level = 0
+
+        level = max(
+            0,
+            level,
+        )
+
+        # OpenPDF level 0 = PDF outline level 1.
+        pdf_level = level + 1
+
+        # Do not allow hierarchy jumps such as:
+        #
+        # Level 0
+        #     Level 3
+        #
+        # because PDF outline hierarchy cannot jump
+        # over an intermediate parent level.
+        if (
+            pdf_level > previous_level + 1
+        ):
+            pdf_level = previous_level + 1
+
+        # ----------------------------------------------------
+        # Validate destination
+        # ----------------------------------------------------
+
+        if not isinstance(
+            left,
+            (int, float),
+        ):
+            left = 0
+
+        if not isinstance(
+            top,
+            (int, float),
+        ):
+            top = 0
+
+        # ----------------------------------------------------
+        # Build PDF TOC item
+        # ----------------------------------------------------
+
+        bookmark_toc.append(
+            [
+                pdf_level,
+                title,
+                page_number,
+                {
+                    'kind': pymupdf.LINK_GOTO,
+                    'page': page_number - 1,
+                    'to': pymupdf.Point(
+                        float(left),
+                        float(top),
+                    ),
+                },
+            ]
+        )
+
+        previous_level = pdf_level
+
+    # --------------------------------------------------------
+    # IMPORTANT:
+    #
+    # Replace the ENTIRE PDF outline.
+    #
+    # Do NOT read doc.get_toc().
+    # Do NOT merge with the old outline.
+    #
+    # The frontend bookmarks list is now the source of truth.
+    # --------------------------------------------------------
+
+    doc.set_toc(
+        bookmark_toc,
+        collapse=0,
+    )
+
+    # --------------------------------------------------------
+    # Save OpenPDF bookmark metadata
+    # --------------------------------------------------------
+
+    doc.set_xml_metadata(
+        build_openpdf_xmp(
+            bookmarks
+        )
+    )
+
+
+@router.post('/openpdf-bookmarks')
+async def get_openpdf_bookmarks(
+    file: UploadFile = File(...),
+):
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(
+            status_code=400,
+            detail='Empty PDF file.',
+        )
+
+    try:
+        doc = pymupdf.open(
+            stream=contents,
+            filetype='pdf',
+        )
+
+        xml = doc.get_xml_metadata()
+
+        doc.close()
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Unable to read PDF metadata: {exc}',
+        )
+
+    if not xml:
+        return []
+
+    match = re.search(
+        r'<openpdf:bookmarks>(.*?)</openpdf:bookmarks>',
+        xml,
+        re.DOTALL,
+    )
+
+    if not match:
+        return []
+
+    encoded = match.group(1).strip()
+
+    return decode_openpdf_bookmarks(
+        encoded
+    )
+
 @router.post('/save-annotations')
 async def save_annotations(
     file: UploadFile = File(...),
     annotations: str = Form(...),
     text_elements: str = Form("[]"),
+    bookmarks: str = Form("[]"),
 ):
     contents = await file.read()
 
@@ -835,6 +1121,25 @@ async def save_annotations(
     text_data = parse_text_elements(
         text_elements
     )
+    
+    try:
+        bookmark_data = json.loads(
+            bookmarks
+        )
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail='Invalid bookmark JSON.',
+        )
+
+    if not isinstance(
+        bookmark_data,
+        list,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail='Bookmarks must be a list.',
+        )
 
     try:
         doc = pymupdf.open(
@@ -980,6 +1285,15 @@ async def save_annotations(
                 page,
                 annotation,
             )
+            
+        # ----------------------------------------------------
+        # Add Bookmarks
+        # ----------------------------------------------------
+
+        add_pdf_bookmarks(
+            doc,
+            bookmark_data,
+        )
             
         # ----------------------------------------------------
         # Add Text

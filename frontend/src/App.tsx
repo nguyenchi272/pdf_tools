@@ -44,8 +44,33 @@ import type {
 
 import {
   saveAnnotations,
+  loadOpenPDFBookmarks,
 } from './api/pdfApi'
 import TextToolbar from './components/TextToolbar'
+import type { PDFOutlineItem } from './hooks/usePDFOutline'
+
+interface BookmarkTarget {
+  text: string
+  page: number
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+interface PDFBookmark {
+  id: string
+  title: string
+  pageNumber: number
+  left: number
+  top: number
+  level: number
+}
+
+interface BookmarkNavigation {
+  bookmark: PDFBookmark
+  requestId: number
+}
 
 
 export default function App() {
@@ -83,6 +108,26 @@ export default function App() {
       x: number
       y: number
     } | null>(null)
+  
+  const [outline, setOutline] = useState<PDFOutlineItem[]>([])
+
+  const [outlineNavigation, setOutlineNavigation] =
+    useState<PDFOutlineItem | null>(null)
+
+  const [
+    selectedBookmarkTarget,
+    setSelectedBookmarkTarget,
+  ] = useState<BookmarkTarget | null>(null)
+
+  const [
+    bookmarks,
+    setBookmarks,
+  ] = useState<PDFBookmark[]>([])
+
+  const [
+  bookmarkNavigation,
+  setBookmarkNavigation,
+] = useState<BookmarkNavigation | null>(null)
 
   const {
     copyText,
@@ -591,6 +636,7 @@ export default function App() {
             editor.pdfUrl,
             annotations,
             textElements,
+            bookmarks,
           )
 
 
@@ -664,6 +710,136 @@ export default function App() {
 
       }
     }
+
+  const handleAddBookmark = () => {
+    if (!selectedBookmarkTarget) {
+      return
+    }
+
+    const target = selectedBookmarkTarget
+
+    const bookmark: PDFBookmark = {
+      id: crypto.randomUUID(),
+      title: target.text,
+      pageNumber: target.page,
+      left: target.x,
+      top: target.y,
+      level: 0,
+    }
+
+    setBookmarks((current) => {
+      const next = [...current, bookmark]
+
+      next.sort((a, b) => {
+        if (a.pageNumber !== b.pageNumber) {
+          return a.pageNumber - b.pageNumber
+        }
+
+        if (a.top !== b.top) {
+          return b.top - a.top
+        }
+
+        return a.left - b.left
+      })
+
+      return next
+    })
+
+    setSelectedBookmarkTarget(null)
+  }
+  
+  const handleChangeBookmarkLevel = (
+    id: string,
+    level: number,
+  ) => {
+    setBookmarks((current) => {
+      const index = current.findIndex(
+        (bookmark) => bookmark.id === id,
+      )
+
+      if (index === -1) {
+        return current
+      }
+
+      // Bookmark đầu tiên luôn là root
+      if (index === 0) {
+        return current.map((bookmark) =>
+          bookmark.id === id
+            ? {
+                ...bookmark,
+                level: 0,
+              }
+            : bookmark,
+        )
+      }
+
+      const previousBookmark = current[index - 1]
+
+      const maxLevel =
+        previousBookmark.level + 1
+
+      const nextLevel = Math.max(
+        0,
+        Math.min(level, maxLevel),
+      )
+
+      return current.map((bookmark) =>
+        bookmark.id === id
+          ? {
+              ...bookmark,
+              level: nextLevel,
+            }
+          : bookmark,
+      )
+    })
+  }
+
+  const handleDeleteBookmark = (id: string) => {
+    setBookmarks((current) =>
+      current.filter(
+        (bookmark) => bookmark.id !== id,
+      ),
+    )
+  }
+
+  const handleEditBookmarkTitle = (
+    id: string,
+    title: string,
+  ) => {
+    const newTitle = title.trim()
+
+    if (!newTitle) {
+      return
+    }
+
+    setBookmarks((current) =>
+      current.map((bookmark) =>
+        bookmark.id === id
+          ? {
+              ...bookmark,
+              title: newTitle,
+            }
+          : bookmark,
+      ),
+    )
+  }
+
+  const handleBookmarkClick = useCallback(
+    (bookmark: PDFBookmark) => {
+      setBookmarkNavigation((current) => ({
+        bookmark,
+        requestId:
+          (current?.requestId ?? 0) + 1,
+      }))
+
+      editor.setCurrentPage(
+        bookmark.pageNumber,
+      )
+    },
+    [
+      editor.setCurrentPage,
+    ],
+  )
 
 
   /*
@@ -787,6 +963,127 @@ export default function App() {
     history.history.present,
     replaceAnnotations,
     replaceTextElements,
+  ])
+
+  useEffect(() => {
+    if (!editor.pdfUrl) {
+      setBookmarks([])
+      return
+    }
+
+    let cancelled = false
+
+    const loadBookmarks = async () => {
+      try {
+        const loaded =
+          await loadOpenPDFBookmarks(
+            editor.pdfUrl,
+          )
+
+        if (cancelled) {
+          return
+        }
+
+        const normalized =
+          loaded.map(
+            (
+              bookmark,
+              index,
+            ) => ({
+              ...bookmark,
+              id:
+                bookmark.id ||
+                `pdf-bookmark-${index}`,
+            }),
+          )
+
+        setBookmarks(
+          normalized,
+        )
+      } catch (error) {
+        console.error(
+          'Failed to load OpenPDF bookmarks:',
+          error,
+        )
+
+        if (!cancelled) {
+          setBookmarks([])
+        }
+      }
+    }
+
+    loadBookmarks()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    editor.pdfUrl,
+  ])
+
+  /*
+  * =====================================================
+  * IMPORT NATIVE PDF BOOKMARKS
+  * =====================================================
+  *
+  * Khi mở một PDF mới:
+  * - outline = native PDF bookmarks
+  * - bookmarks = danh sách bookmark mà OpenPDF quản lý
+  *
+  * Import toàn bộ native outline sang bookmarks
+  * để PDF có sẵn bookmark cũng sử dụng được
+  * các chức năng click / level / delete / highlight.
+  */
+
+  useEffect(() => {
+    if (!editor.pdfUrl) {
+      setBookmarks([])
+      return
+    }
+
+    if (outline.length === 0) {
+      setBookmarks([])
+      return
+    }
+
+    const importedBookmarks: PDFBookmark[] = []
+
+    const walkOutline = (
+      items: PDFOutlineItem[],
+      level: number,
+    ) => {
+      for (const item of items) {
+        if (
+          item.pageNumber === null ||
+          item.pageNumber === undefined
+        ) {
+          continue
+        }
+
+        importedBookmarks.push({
+          id: crypto.randomUUID(),
+          title: item.title,
+          pageNumber: item.pageNumber,
+          left: item.left ?? 0,
+          top: item.top ?? 0,
+          level,
+        })
+
+        if (item.items.length > 0) {
+          walkOutline(
+            item.items,
+            level + 1,
+          )
+        }
+      }
+    }
+
+    walkOutline(outline, 0)
+
+    setBookmarks(importedBookmarks)
+  }, [
+    editor.pdfUrl,
+    outline,
   ])
 
 
@@ -1168,6 +1465,36 @@ export default function App() {
                 editor.handleReorder
               }
 
+              outline={outline}
+
+              onOutlineItemClick={setOutlineNavigation}
+
+              selectedBookmarkTarget={
+                selectedBookmarkTarget
+              }
+
+              onAddBookmark={
+                handleAddBookmark
+              }
+
+              bookmarks={bookmarks}
+
+              onChangeBookmarkLevel={
+                handleChangeBookmarkLevel
+              }
+
+              onDeleteBookmark={
+                handleDeleteBookmark
+              }
+
+              onEditBookmarkTitle={
+                handleEditBookmarkTitle
+              }
+
+              onBookmarkClick={
+                handleBookmarkClick
+              }
+
             />
 
 
@@ -1244,6 +1571,11 @@ export default function App() {
                 onBeginResizeText={beginResizeText}
                 onResizeText={resizeText}
                 onEndResizeText={endResizeText}
+
+                onOutlineChange={setOutline}
+                outlineNavigation={outlineNavigation}
+                bookmarkNavigation={bookmarkNavigation}
+                onTextSelection={setSelectedBookmarkTarget}
 
                 /*
                  * Annotation state
