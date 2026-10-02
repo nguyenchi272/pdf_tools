@@ -1143,7 +1143,7 @@ body {
   background: transparent;
 
   text-align: left;
-
+  color: #1b1b1b;
   font-size: 14px;
 
   cursor: pointer;
@@ -1405,6 +1405,7 @@ body {
   border-radius: 6px;
 
   background: #fff;
+  color: black;
 
   font-size: 14px;
   cursor: pointer;
@@ -1441,6 +1442,7 @@ body {
   border-radius: 4px;
 
   background: #fff;
+  color: black;
 
   outline: none;
 
@@ -1915,4 +1917,104 @@ body {
 
 .bookmark-title-input:focus {
   border-color: #666;
+}
+
+.merge-pdf {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.merge-pdf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.merge-pdf-header h2 {
+  margin: 0;
+}
+
+.merge-pdf-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  border: 2px dashed #bbb;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.merge-pdf-dropzone p {
+  margin: 4px 0;
+}
+
+.merge-pdf-dropzone-dragging {
+  border-color: #1976d2;
+  background: rgba(25, 118, 210, 0.06);
+}
+
+.merge-pdf-files {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.merge-pdf-files h3 {
+  margin: 0 0 10px;
+}
+
+.merge-pdf-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.merge-pdf-file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.merge-pdf-file-number {
+  width: 24px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.merge-pdf-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merge-pdf-file-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.merge-pdf-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 16px;
+}
+
+.merge-pdf-error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #fee;
+  color: #b00020;
 }

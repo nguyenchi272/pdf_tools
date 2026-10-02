@@ -380,3 +380,46 @@ export async function loadOpenPDFBookmarks(
 
   return result.json()
 }
+
+export async function mergePdfs(
+  files: File[],
+): Promise<Blob> {
+  if (files.length < 2) {
+    throw new Error(
+      'At least two PDF files are required.',
+    )
+  }
+
+  const formData = new FormData()
+
+  for (const file of files) {
+    formData.append('files', file)
+  }
+
+  const response = await fetch(
+    'http://localhost:8090/api/pdf/merge-pdfs',
+    {
+      method: 'POST',
+      body: formData,
+    },
+  )
+
+  if (!response.ok) {
+    let message =
+      `Merge PDF failed: ${response.status}`
+
+    try {
+      const data = await response.json()
+
+      if (data?.detail) {
+        message = data.detail
+      }
+    } catch {
+      // Ignore JSON parsing errors.
+    }
+
+    throw new Error(message)
+  }
+
+  return await response.blob()
+}

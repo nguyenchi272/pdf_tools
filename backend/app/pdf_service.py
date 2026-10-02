@@ -6,7 +6,6 @@ import re
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse, Response
 
-
 router = APIRouter()
 
 
@@ -247,6 +246,93 @@ def document_response(
         },
     )
 
+# ============================================================
+# Merge PDFs
+# ============================================================
+
+@router.post(
+    "/merge-pdfs",
+    response_class=StreamingResponse,
+)
+async def merge_pdfs(
+    files: list[UploadFile] = File(...),
+):
+    """
+    Merge multiple PDF files into one PDF.
+
+    The PDFs are merged in the exact order received.
+    """
+
+    if not files:
+        raise HTTPException(
+            status_code=400,
+            detail="No PDF files provided.",
+        )
+
+    if len(files) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="At least two PDF files are required.",
+        )
+
+    output = pymupdf.open()
+
+    try:
+        for index, file in enumerate(files):
+
+            contents = await file.read()
+
+            if not contents:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"PDF file #{index + 1} is empty."
+                    ),
+                )
+
+            try:
+                source = pymupdf.open(
+                    stream=contents,
+                    filetype="pdf",
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Invalid PDF file "
+                        f"#{index + 1}: {exc}"
+                    ),
+                )
+
+            try:
+                output.insert_pdf(source)
+            finally:
+                source.close()
+
+        if len(output) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="The merged PDF contains no pages.",
+            )
+
+        return document_response(
+            output,
+            filename="merged.pdf",
+        )
+
+    except HTTPException:
+        if not output.is_closed:
+            output.close()
+        raise
+
+    except Exception as exc:
+        if not output.is_closed:
+            output.close()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to merge PDFs: {exc}",
+        )
 
 # ============================================================
 # Save Annotations

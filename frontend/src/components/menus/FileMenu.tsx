@@ -3,6 +3,7 @@ import {
   FolderOpen,
   Save,
   X,
+  Files,
 } from 'lucide-react'
 
 interface FileMenuProps {
@@ -11,6 +12,7 @@ interface FileMenuProps {
   onSave: () => void
   onClose: () => void
   onClosePDF: () => void
+  onMergePDF: () => void
 
   hasPDF: boolean
   processing: boolean
@@ -23,7 +25,8 @@ export default function FileMenu({
   onSave,
   onClose,
   onClosePDF,
-  
+  onMergePDF,
+
   hasPDF,
   processing,
   isSaving,
@@ -31,6 +34,7 @@ export default function FileMenu({
 
   return (
     <div className="top-menu-dropdown">
+
       <button
         onClick={() => {
           onClose()
@@ -59,6 +63,19 @@ export default function FileMenu({
         <kbd>Ctrl+O</kbd>
       </button>
 
+      <button
+        onClick={() => {
+          onClose()
+          onMergePDF()
+        }}
+        disabled={processing || isSaving}
+      >
+        <Files size={16} />
+
+        <span>
+          Merge PDF
+        </span>
+      </button>
 
       <button
         onClick={() => {
@@ -85,10 +102,16 @@ export default function FileMenu({
           onClose()
           onClosePDF()
         }}
-        disabled={!hasPDF || processing}
+        disabled={
+          !hasPDF ||
+          processing
+        }
       >
         <X size={16} />
-        <span>Close PDF</span>
+
+        <span>
+          Close PDF
+        </span>
       </button>
 
     </div>

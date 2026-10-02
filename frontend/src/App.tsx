@@ -47,6 +47,7 @@ import {
   loadOpenPDFBookmarks,
 } from './api/pdfApi'
 import TextToolbar from './components/TextToolbar'
+import MergePDF from './components/MergePDF'
 import type { PDFOutlineItem } from './hooks/usePDFOutline'
 
 interface BookmarkTarget {
@@ -128,6 +129,9 @@ export default function App() {
   bookmarkNavigation,
   setBookmarkNavigation,
 ] = useState<BookmarkNavigation | null>(null)
+
+  const [showMergePDF, setShowMergePDF] =
+    useState(false)
 
   const {
     copyText,
@@ -271,6 +275,7 @@ export default function App() {
     | 'open'
     | 'new'
     | 'close'
+    | 'merge'
     | null
 
   const [pendingAction, setPendingAction] =
@@ -287,6 +292,11 @@ export default function App() {
 
     if (pendingAction === 'close') {
       editor.closePDF()
+    }
+
+    if (pendingAction === 'merge') {
+      editor.closePDF()
+      setShowMergePDF(true)
     }
 
     setPendingAction(null)
@@ -322,6 +332,34 @@ export default function App() {
     setShowUnsavedDialog(true)
   }
 
+  const handleMergePDF = () => {
+    /*
+    * No PDF is currently open.
+    * Open Merge PDF directly.
+    */
+    if (!editor.pdfFile) {
+      setShowMergePDF(true)
+      return
+    }
+
+    /*
+    * PDF is open but has no unsaved changes.
+    * Close it first, then open Merge PDF.
+    */
+    if (!editor.isDirty) {
+      editor.closePDF()
+      setShowMergePDF(true)
+      return
+    }
+
+    /*
+    * PDF has unsaved changes.
+    * Reuse the existing unsaved-changes dialog.
+    */
+    setPendingAction('merge')
+    setShowUnsavedDialog(true)
+  }
+
   const handleDontSave = () => {
     setShowUnsavedDialog(false)
 
@@ -333,8 +371,13 @@ export default function App() {
     setPendingAction(null)
   }
 
-  const handleSaveBeforeAction = () => {
-    editor.savePDF()
+  const handleSaveBeforeAction = async () => {
+    const saved =
+      await handleSaveAnnotations()
+
+    if (!saved) {
+      return
+    }
 
     setShowUnsavedDialog(false)
 
@@ -620,96 +663,77 @@ export default function App() {
       ],
     )
 
-  const handleSaveAnnotations =
-    async () => {
-
-      if (!editor.pdfUrl) {
-        return
-      }
-
-      try {
-
-        setIsSaving(true)
-
-        const newFile =
-          await saveAnnotations(
-            editor.pdfUrl,
-            annotations,
-            textElements,
-            bookmarks,
-          )
-
-
-        /*
-         * Make the newly generated PDF
-         * the current PDF.
-         */
-        editor.replacePdfFile(
-          newFile,
-        )
-        annotationsRef.current =
-          annotations
-
-        textElementsRef.current =
-          []
-        replaceTextElements([])
-        history.reset({
-          annotations,
-          textElements: [],
-        })
-
-        /*
-         * Download the generated PDF.
-         */
-        const url =
-          URL.createObjectURL(
-            newFile,
-          )
-
-        const link =
-          document.createElement('a')
-
-        link.href = url
-
-        link.download =
-          newFile.name ||
-          'annotated.pdf'
-
-        document.body.appendChild(
-          link,
-        )
-
-        link.click()
-
-        link.remove()
-
-
-        /*
-         * Release object URL.
-         */
-        setTimeout(() => {
-          URL.revokeObjectURL(url)
-        }, 1000)
-
-      } catch (error) {
-
-        console.error(
-          'Failed to save annotations:',
-          error,
-        )
-
-        window.alert(
-          error instanceof Error
-            ? error.message
-            : 'Failed to save annotations.',
-        )
-
-      } finally {
-
-        setIsSaving(false)
-
-      }
+  const handleSaveAnnotations = async (): Promise<boolean> => {
+    if (!editor.pdfUrl) {
+      return false
     }
+
+    try {
+      setIsSaving(true)
+
+      const newFile =
+        await saveAnnotations(
+          editor.pdfUrl,
+          annotations,
+          textElements,
+          bookmarks,
+        )
+
+      editor.replacePdfFile(newFile)
+
+      annotationsRef.current = annotations
+
+      textElementsRef.current = []
+      replaceTextElements([])
+
+      history.reset({
+        annotations,
+        textElements: [],
+      })
+
+      const url =
+        URL.createObjectURL(newFile)
+
+      const link =
+        document.createElement('a')
+
+      link.href = url
+
+      link.download =
+        newFile.name ||
+        'annotated.pdf'
+
+      document.body.appendChild(link)
+
+      link.click()
+
+      link.remove()
+
+      setTimeout(() => {
+        URL.revokeObjectURL(url)
+      }, 1000)
+
+      return true
+
+    } catch (error) {
+
+      console.error(
+        'Failed to save annotations:',
+        error,
+      )
+
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : 'Failed to save annotations.',
+      )
+
+      return false
+
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   const handleAddBookmark = () => {
     if (!selectedBookmarkTarget) {
@@ -841,6 +865,68 @@ export default function App() {
     ],
   )
 
+  const handleMergedPDF = useCallback(
+    (file: File) => {
+      /*
+      * The merged PDF becomes the new
+      * current document.
+      */
+      editor.replacePdfFile(file)
+
+      /*
+      * Reset document-related state.
+      */
+      replaceAnnotations([])
+
+      annotationsRef.current = []
+
+      replaceTextElements([])
+
+      textElementsRef.current = []
+
+      setBookmarks([])
+
+      setSelectedBookmarkTarget(null)
+
+      setBookmarkNavigation(null)
+
+      setOutline([])
+
+      setOutlineNavigation(null)
+
+      setSelectedTextId(null)
+
+      setPastePosition(null)
+
+      setAnnotationMode(null)
+
+      setTextMode(false)
+
+      /*
+      * Reset editor history for the new document.
+      */
+      history.reset({
+        annotations: [],
+        textElements: [],
+      })
+
+      /*
+      * The merged PDF itself is already saved.
+      */
+      editor.setIsDirty(false)
+
+      /*
+      * Close Merge PDF screen.
+      */
+      setShowMergePDF(false)
+    },
+    [
+      editor,
+      replaceAnnotations,
+      replaceTextElements,
+      history,
+    ],
+  )
 
   /*
    * =====================================================
@@ -1158,6 +1244,10 @@ export default function App() {
             handleClosePDF
           }
 
+          onMergePDF={
+            handleMergePDF
+          }
+
           hasPDF={
             !!editor.pdfFile
           }
@@ -1425,8 +1515,16 @@ export default function App() {
           ================================================= */}
 
       <main className="main-content">
-
-        {editor.pdfUrl ? (
+        {showMergePDF ? (
+          <MergePDF
+            onClose={() =>
+              setShowMergePDF(false)
+            }
+            onMerged={
+              handleMergedPDF
+            }
+          />
+        ) : editor.pdfUrl ? (
 
           <>
 
@@ -1665,7 +1763,7 @@ export default function App() {
           </div>
 
         )}
-
+      
       </main>
 
 

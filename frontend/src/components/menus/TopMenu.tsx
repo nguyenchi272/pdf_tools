@@ -33,6 +33,7 @@ interface TopMenuProps {
   onOpen: () => void
   onSave: () => void
   onClosePDF: () => void
+  onMergePDF: () => void
   hasPDF: boolean
   processing: boolean
   isSaving: boolean
@@ -109,6 +110,7 @@ export default function TopMenu({
   onOpen,
   onSave,
   onClosePDF,
+  onMergePDF,
   hasPDF,
   processing,
   isSaving,
@@ -146,6 +148,7 @@ export default function TopMenu({
               onSave={onSave}
               onClose={closeTopMenu}
               onClosePDF={onClosePDF}
+              onMergePDF={onMergePDF}
               hasPDF={hasPDF}
               processing={processing}
               isSaving={isSaving}
